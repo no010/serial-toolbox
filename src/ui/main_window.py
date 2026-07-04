@@ -1,7 +1,7 @@
 """
 主窗口 UI
 基于 PyQt6 的串口调试助手界面
-v2.0 - 新增: 波形图、预设指令、DTR/RTS、Modbus面板、配置保存
+v3.0 - 新增: Modbus解析、日志轮转、脚本引擎、多串口对比
 """
 
 import sys
@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QDialog,
     QFormLayout, QDialogButtonBox, QToolTip
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot, QThread
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QAction, QFont, QTextCursor, QColor
 
 import pyqtgraph as pg
@@ -25,6 +25,14 @@ import numpy as np
 from src.core.serial_manager import SerialManager, SerialConfig, DataFormat
 from src.core.protocol_parser import ModbusRTU, CRC16
 from src.core.config_manager import ConfigManager
+from src.core.log_rotator import RotatingLogWriter, LogConfig
+from src.core.multi_serial_manager import MultiSerialManager
+
+# 扩展面板
+from src.ui.extended_panels import (
+    ModbusResponsePanel, LogSettingsDialog, ScriptEditorPanel,
+    MultiSerialComparePanel
+)
 
 
 # ─── 波形图组件 ───────────────────────────────────────────────
@@ -312,7 +320,7 @@ class ModbusPanel(QGroupBox):
 # ─── 主窗口 ──────────────────────────────────────────────────
 
 class SerialToolboxMainWindow(QMainWindow):
-    """串口调试助手主窗口 v2.0"""
+    """串口调试助手主窗口 v3.0"""
     
     # 信号
     data_received = pyqtSignal(bytes)
@@ -325,7 +333,15 @@ class SerialToolboxMainWindow(QMainWindow):
         self.config_mgr = ConfigManager()
         self.app_config = self.config_mgr.load()
         
+        # 串口管理器
         self.serial_manager = SerialManager()
+        
+        # 多串口管理器
+        self.multi_manager = MultiSerialManager()
+        
+        # 日志写入器
+        self.log_writer = RotatingLogWriter(LogConfig(enabled=False))
+        
         self.send_history = []
         self.received_bytes = 0
         self.sent_bytes = 0
@@ -346,7 +362,7 @@ class SerialToolboxMainWindow(QMainWindow):
     
     def init_ui(self):
         """初始化 UI"""
-        self.setWindowTitle('串口调试助手 - Serial Toolbox v2.0')
+        self.setWindowTitle('串口调试助手 - Serial Toolbox v3.0')
         self.setGeometry(
             self.app_config.window_x, self.app_config.window_y,
             self.app_config.window_w, self.app_config.window_h
@@ -369,7 +385,7 @@ class SerialToolboxMainWindow(QMainWindow):
         # 主内容区 - 使用分割器
         splitter = QSplitter(Qt.Orientation.Horizontal)
         
-        # 左侧: 接收区 (文本 + 波形图 Tab)
+        # 左侧: 接收区 (文本 + 波形图 + Modbus解析 Tab)
         splitter.addWidget(self.create_receive_tabs())
         
         # 右侧: 发送区 + 预设 + Modbus
@@ -384,6 +400,19 @@ class SerialToolboxMainWindow(QMainWindow):
         splitter.addWidget(right_panel)
         splitter.setSizes([600, 400])
         main_layout.addWidget(splitter, 1)
+        
+        # 底部: 脚本编辑器 + 多串口对比 (Tab)
+        bottom_tabs = QTabWidget()
+        
+        # 脚本编辑器
+        self.script_panel = ScriptEditorPanel(self.serial_manager)
+        bottom_tabs.addTab(self.script_panel, '🐍 脚本引擎')
+        
+        # 多串口对比
+        self.compare_panel = MultiSerialComparePanel(self.multi_manager)
+        bottom_tabs.addTab(self.compare_panel, '🔀 多串口对比')
+        
+        main_layout.addWidget(bottom_tabs)
         
         # 状态栏
         self.create_status_bar()
@@ -417,6 +446,10 @@ class SerialToolboxMainWindow(QMainWindow):
         clear_action.setShortcut('Ctrl+L')
         clear_action.triggered.connect(self.clear_display)
         settings_menu.addAction(clear_action)
+        
+        log_settings_action = QAction('日志设置...')
+        log_settings_action.triggered.connect(self._show_log_settings)
+        settings_menu.addAction(log_settings_action)
         
         save_config_action = QAction('保存配置', self)
         save_config_action.triggered.connect(self.save_config)
@@ -516,7 +549,7 @@ class SerialToolboxMainWindow(QMainWindow):
         return group
     
     def create_receive_tabs(self) -> QTabWidget:
-        """创建接收区 (文本 + 波形图)"""
+        """创建接收区 (文本 + 波形图 + Modbus解析)"""
         tabs = QTabWidget()
         
         # Tab 1: 文本接收
@@ -556,6 +589,10 @@ class SerialToolboxMainWindow(QMainWindow):
         # Tab 2: 波形图
         self.chart = RealtimeChart(max_points=self.app_config.chart_max_points)
         tabs.addTab(self.chart, '📈 波形')
+        
+        # Tab 3: Modbus 响应解析
+        self.modbus_response_panel = ModbusResponsePanel()
+        tabs.addTab(self.modbus_response_panel, '🔢 Modbus解析')
         
         return tabs
     
@@ -681,8 +718,8 @@ class SerialToolboxMainWindow(QMainWindow):
         
         self.status_bar.addPermanentWidget(QLabel('|'))
         
-        self.rate_label = QLabel('速率: --')
-        self.status_bar.addPermanentWidget(self.rate_label)
+        self.log_label = QLabel('日志: 关闭')
+        self.status_bar.addPermanentWidget(self.log_label)
     
     def setup_connections(self):
         """设置信号槽连接"""
@@ -695,6 +732,12 @@ class SerialToolboxMainWindow(QMainWindow):
         modbus_panel = self.findChild(ModbusPanel)
         if modbus_panel:
             modbus_panel.send_frame.connect(self._send_modbus_frame)
+        
+        # 脚本引擎日志
+        self.script_panel.script_log.connect(self.script_panel.append_log)
+        
+        # 多串口管理器回调
+        self.multi_manager.on_data_received = self._on_multi_data_received
     
     # ─── 串口操作 ────────────────────────────────────────────
     
@@ -748,6 +791,12 @@ class SerialToolboxMainWindow(QMainWindow):
         
         # 波形图显示
         self.chart.append_data(data)
+        
+        # Modbus 解析
+        self.modbus_response_panel.feed_data(data)
+        
+        # 日志记录
+        self.log_writer.write_rx(data, self.hex_receive_check.isChecked())
     
     def display_received_data(self, data: bytes):
         """显示接收的数据"""
@@ -795,6 +844,9 @@ class SerialToolboxMainWindow(QMainWindow):
         if self.serial_manager.send_text(text, fmt):
             self.sent_bytes += len(text.encode('utf-8'))
             self.send_input.clear()
+            
+            # 日志记录
+            self.log_writer.write_tx(text.encode('utf-8'), self.hex_send_check.isChecked())
     
     def _send_modbus_frame(self, frame: bytes):
         """发送 Modbus 帧"""
@@ -806,6 +858,9 @@ class SerialToolboxMainWindow(QMainWindow):
             hex_str = ' '.join(f'{b:02X}' for b in frame)
             timestamp = datetime.now().strftime('[%H:%M:%S.%f]')[:-3]
             self.receive_text.append(f'{timestamp} [TX Modbus] {hex_str}')
+            
+            # 日志记录
+            self.log_writer.write_tx(frame, hex_mode=True)
     
     def load_history(self, index):
         """加载历史记录"""
@@ -942,6 +997,29 @@ class SerialToolboxMainWindow(QMainWindow):
         if self.serial_manager.send_text(data_text, fmt):
             self.sent_bytes += len(data_text.encode('utf-8'))
     
+    # ─── 日志设置 ────────────────────────────────────────────
+    
+    def _show_log_settings(self):
+        """显示日志设置对话框"""
+        dialog = LogSettingsDialog(self, self.log_writer.config)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            new_config = dialog.get_config()
+            self.log_writer.close()
+            self.log_writer = RotatingLogWriter(new_config)
+            
+            if new_config.enabled:
+                self.log_label.setText(f'日志: {new_config.log_dir}')
+                self.log_label.setStyleSheet('color: green;')
+            else:
+                self.log_label.setText('日志: 关闭')
+                self.log_label.setStyleSheet('color: gray;')
+    
+    # ─── 多串口回调 ──────────────────────────────────────────
+    
+    def _on_multi_data_received(self, slot_name: str, data: bytes):
+        """多串口数据接收回调"""
+        self.compare_panel.append_data(slot_name, data, self.hex_receive_check.isChecked())
+    
     # ─── 连接状态 ────────────────────────────────────────────
     
     @pyqtSlot(str)
@@ -983,9 +1061,6 @@ class SerialToolboxMainWindow(QMainWindow):
         """更新状态栏"""
         self.rx_label.setText(f'RX: {self.received_bytes} bytes')
         self.tx_label.setText(f'TX: {self.sent_bytes} bytes')
-        # 简单速率估算 (每秒)
-        if self.received_bytes > 0:
-            self.rate_label.setText(f'RX: {self.received_bytes} B')
     
     # ─── 配置管理 ────────────────────────────────────────────
     
@@ -1024,8 +1099,6 @@ class SerialToolboxMainWindow(QMainWindow):
         cfg.window_w = geo.width()
         cfg.window_h = geo.height()
         
-        # 预设已单独保存
-        
         self.config_mgr.save(cfg)
         self.status_bar.showMessage('配置已保存', 2000)
     
@@ -1035,6 +1108,7 @@ class SerialToolboxMainWindow(QMainWindow):
         """清空接收区"""
         self.receive_text.clear()
         self.chart.clear()
+        self.modbus_response_panel.clear()
         self.received_bytes = 0
     
     def clear_display(self):
@@ -1057,16 +1131,19 @@ class SerialToolboxMainWindow(QMainWindow):
         """显示关于对话框"""
         QMessageBox.about(
             self, '关于',
-            '串口调试助手 v2.0\n\n'
+            '串口调试助手 v3.0\n\n'
             '功能:\n'
             '• 串口通信 (HEX/ASCII 切换)\n'
             '• 实时波形图 (pyqtgraph)\n'
+            '• Modbus RTU 响应自动解析\n'
             '• 预设指令管理\n'
             '• DTR/RTS 信号线控制\n'
             '• Modbus RTU 快捷操作\n'
             '• 自动发送 (定时)\n'
-            '• 配置保存/加载\n'
-            '• 数据导出\n\n'
+            '• 日志轮转 (按大小/时间/天)\n'
+            '• Python 脚本引擎\n'
+            '• 多串口对比 (最多4路)\n'
+            '• 配置保存/加载\n\n'
             '基于 PyQt6 + pyqtgraph 开发'
         )
     
@@ -1075,8 +1152,14 @@ class SerialToolboxMainWindow(QMainWindow):
         # 断开连接
         if self.serial_manager.is_connected:
             self.serial_manager.disconnect()
+        self.multi_manager.disconnect_all()
+        
         # 停止定时器
         self.auto_send_timer.stop()
+        
+        # 关闭日志
+        self.log_writer.close()
+        
         # 保存配置
         self.save_config()
         event.accept()
@@ -1118,7 +1201,7 @@ class SerialToolboxMainWindow(QMainWindow):
             QPushButton:checked:hover {
                 background-color: #da190b;
             }
-            QTextEdit {
+            QTextEdit, QPlainTextEdit {
                 background-color: #1e1e1e;
                 color: #d4d4d4;
                 border: 1px solid #cccccc;
@@ -1162,6 +1245,7 @@ class SerialToolboxMainWindow(QMainWindow):
 
 def main():
     """应用入口"""
+    from PyQt6.QtWidgets import QApplication
     app = QApplication(sys.argv)
     app.setApplicationName('Serial Toolbox')
     
