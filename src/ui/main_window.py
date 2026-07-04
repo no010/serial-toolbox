@@ -27,12 +27,15 @@ from src.core.protocol_parser import ModbusRTU, CRC16
 from src.core.config_manager import ConfigManager
 from src.core.log_rotator import RotatingLogWriter, LogConfig
 from src.core.multi_serial_manager import MultiSerialManager
+from src.core.protocol_plugin import ProtocolRegistry, StreamProtocolParser
 
 # 扩展面板
 from src.ui.extended_panels import (
     ModbusResponsePanel, LogSettingsDialog, ScriptEditorPanel,
     MultiSerialComparePanel
 )
+from src.ui.multi_port_dialog import MultiPortManagerDialog
+from src.ui.enhanced_chart import EnhancedChart
 
 
 # ─── 波形图组件 ───────────────────────────────────────────────
@@ -339,6 +342,10 @@ class SerialToolboxMainWindow(QMainWindow):
         # 多串口管理器
         self.multi_manager = MultiSerialManager()
         
+        # 协议注册表
+        self.protocol_registry = ProtocolRegistry()
+        self.stream_parser = StreamProtocolParser(self.protocol_registry)
+        
         # 日志写入器
         self.log_writer = RotatingLogWriter(LogConfig(enabled=False))
         
@@ -362,7 +369,7 @@ class SerialToolboxMainWindow(QMainWindow):
     
     def init_ui(self):
         """初始化 UI"""
-        self.setWindowTitle('串口调试助手 - Serial Toolbox v3.0')
+        self.setWindowTitle('串口调试助手 - Serial Toolbox v4.0')
         self.setGeometry(
             self.app_config.window_x, self.app_config.window_y,
             self.app_config.window_w, self.app_config.window_h
@@ -454,6 +461,10 @@ class SerialToolboxMainWindow(QMainWindow):
         save_config_action = QAction('保存配置', self)
         save_config_action.triggered.connect(self.save_config)
         settings_menu.addAction(save_config_action)
+        
+        multi_port_action = QAction('多串口管理器...')
+        multi_port_action.triggered.connect(self._show_multi_port_manager)
+        settings_menu.addAction(multi_port_action)
         
         # 帮助菜单
         help_menu = menubar.addMenu('帮助(&H)')
@@ -586,13 +597,41 @@ class SerialToolboxMainWindow(QMainWindow):
         
         tabs.addTab(text_widget, '📝 文本')
         
-        # Tab 2: 波形图
-        self.chart = RealtimeChart(max_points=self.app_config.chart_max_points)
+        # Tab 2: 增强波形图 (多通道 + XY)
+        self.chart = EnhancedChart(max_points=self.app_config.chart_max_points, max_channels=4)
         tabs.addTab(self.chart, '📈 波形')
         
         # Tab 3: Modbus 响应解析
         self.modbus_response_panel = ModbusResponsePanel()
         tabs.addTab(self.modbus_response_panel, '🔢 Modbus解析')
+        
+        # Tab 4: 协议插件解析
+        protocol_widget = QWidget()
+        protocol_layout = QVBoxLayout(protocol_widget)
+        
+        proto_ctrl = QHBoxLayout()
+        proto_ctrl.addWidget(QLabel('选择协议:'))
+        self.protocol_combo = QComboBox()
+        self.protocol_combo.addItems(['自动检测'] + self.protocol_registry.list_protocols())
+        self.protocol_combo.currentTextChanged.connect(self._on_protocol_changed)
+        proto_ctrl.addWidget(self.protocol_combo)
+        
+        proto_ctrl.addStretch()
+        
+        proto_clear_btn = QPushButton('清空')
+        proto_clear_btn.clicked.connect(self._clear_protocol_table)
+        proto_ctrl.addWidget(proto_clear_btn)
+        
+        protocol_layout.addLayout(proto_ctrl)
+        
+        # 协议解析结果表格
+        self.protocol_table = QTableWidget()
+        self.protocol_table.setColumnCount(5)
+        self.protocol_table.setHorizontalHeaderLabels(['时间', '协议', '字段', '值', '原始数据'])
+        self.protocol_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        protocol_layout.addWidget(self.protocol_table)
+        
+        tabs.addTab(protocol_widget, '🔌 协议解析')
         
         return tabs
     
@@ -789,11 +828,14 @@ class SerialToolboxMainWindow(QMainWindow):
         # 文本显示
         self.display_received_data(data)
         
-        # 波形图显示
-        self.chart.append_data(data)
+        # 波形图显示 (多通道)
+        self.chart.append_data(data, channel=0)
         
         # Modbus 解析
         self.modbus_response_panel.feed_data(data)
+        
+        # 协议插件解析
+        self._parse_protocol_data(data)
         
         # 日志记录
         self.log_writer.write_rx(data, self.hex_receive_check.isChecked())
@@ -1020,6 +1062,56 @@ class SerialToolboxMainWindow(QMainWindow):
         """多串口数据接收回调"""
         self.compare_panel.append_data(slot_name, data, self.hex_receive_check.isChecked())
     
+    # ─── 协议插件 ────────────────────────────────────────────
+    
+    def _on_protocol_changed(self, protocol_name: str):
+        """协议选择变化"""
+        if protocol_name == '自动检测':
+            self.stream_parser.set_protocol(None)
+        else:
+            self.stream_parser.set_protocol(protocol_name)
+    
+    def _parse_protocol_data(self, data: bytes):
+        """解析协议数据"""
+        frames = self.stream_parser.feed(data)
+        for frame in frames:
+            self._add_protocol_frame(frame)
+    
+    def _add_protocol_frame(self, frame):
+        """添加协议帧到表格"""
+        row = self.protocol_table.rowCount()
+        self.protocol_table.insertRow(row)
+        
+        self.protocol_table.setItem(row, 0, QTableWidgetItem(frame.timestamp))
+        self.protocol_table.setItem(row, 1, QTableWidgetItem(frame.protocol))
+        
+        # 显示第一个字段
+        if frame.fields:
+            first_key = list(frame.fields.keys())[0]
+            self.protocol_table.setItem(row, 2, QTableWidgetItem(first_key))
+            self.protocol_table.setItem(row, 3, QTableWidgetItem(str(frame.fields[first_key])))
+        else:
+            self.protocol_table.setItem(row, 2, QTableWidgetItem('-'))
+            self.protocol_table.setItem(row, 3, QTableWidgetItem('-'))
+        
+        # 原始数据
+        raw_hex = ' '.join(f'{b:02X}' for b in frame.raw_data[:20])
+        if len(frame.raw_data) > 20:
+            raw_hex += '...'
+        self.protocol_table.setItem(row, 4, QTableWidgetItem(raw_hex))
+    
+    def _clear_protocol_table(self):
+        """清空协议表格"""
+        self.protocol_table.setRowCount(0)
+        self.stream_parser.clear()
+    
+    # ─── 多串口管理器对话框 ──────────────────────────────────
+    
+    def _show_multi_port_manager(self):
+        """显示多串口管理器对话框"""
+        dialog = MultiPortManagerDialog(self, self.multi_manager)
+        dialog.exec()
+    
     # ─── 连接状态 ────────────────────────────────────────────
     
     @pyqtSlot(str)
@@ -1131,18 +1223,20 @@ class SerialToolboxMainWindow(QMainWindow):
         """显示关于对话框"""
         QMessageBox.about(
             self, '关于',
-            '串口调试助手 v3.0\n\n'
+            '串口调试助手 v4.0\n\n'
             '功能:\n'
             '• 串口通信 (HEX/ASCII 切换)\n'
-            '• 实时波形图 (pyqtgraph)\n'
+            '• 增强波形图 (多通道 + XY 李萨如)\n'
             '• Modbus RTU 响应自动解析\n'
+            '• 协议插件框架 (CAN/I2C/UART-Packet)\n'
             '• 预设指令管理\n'
             '• DTR/RTS 信号线控制\n'
             '• Modbus RTU 快捷操作\n'
             '• 自动发送 (定时)\n'
             '• 日志轮转 (按大小/时间/天)\n'
-            '• Python 脚本引擎\n'
+            '• Python 脚本引擎 (断点/wait_response)\n'
             '• 多串口对比 (最多4路)\n'
+            '• 多串口管理器 (独立配置)\n'
             '• 配置保存/加载\n\n'
             '基于 PyQt6 + pyqtgraph 开发'
         )
