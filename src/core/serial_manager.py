@@ -1,6 +1,6 @@
 """
 串口管理核心模块
-负责串口扫描、连接、数据收发
+负责串口扫描、连接、数据收发、信号线控制
 """
 
 import serial
@@ -44,6 +44,7 @@ class SerialManager:
         self.on_data_received: Optional[Callable[[bytes], None]] = None
         self.on_error: Optional[Callable[[str], None]] = None
         self.on_connection_changed: Optional[Callable[[bool], None]] = None
+        self.on_signal_changed: Optional[Callable[[dict], None]] = None
     
     @staticmethod
     def scan_ports() -> List[dict]:
@@ -160,6 +161,57 @@ class SerialManager:
             if self.on_error:
                 self.on_error(f"发送失败: {e}")
             return False
+    
+    # ---- 信号线控制 ----
+    
+    def set_dtr(self, state: bool) -> bool:
+        """设置 DTR 信号线"""
+        if not self.is_connected or not self.serial:
+            return False
+        try:
+            self.serial.dtr = state
+            self._notify_signals()
+            return True
+        except Exception as e:
+            if self.on_error:
+                self.on_error(f"DTR 设置失败: {e}")
+            return False
+    
+    def set_rts(self, state: bool) -> bool:
+        """设置 RTS 信号线"""
+        if not self.is_connected or not self.serial:
+            return False
+        try:
+            self.serial.rts = state
+            self._notify_signals()
+            return True
+        except Exception as e:
+            if self.on_error:
+                self.on_error(f"RTS 设置失败: {e}")
+            return False
+    
+    def get_signals(self) -> dict:
+        """获取当前信号线状态"""
+        if not self.serial or not self.is_connected:
+            return {}
+        try:
+            return {
+                'dtr': self.serial.dtr,
+                'rts': self.serial.rts,
+                'cts': self.serial.cts,
+                'dsr': self.serial.dsr,
+                'cd': getattr(self.serial, 'cd', False),
+                'ri': getattr(self.serial, 'ri', False),
+            }
+        except Exception:
+            return {}
+    
+    def _notify_signals(self):
+        """通知信号线状态变化"""
+        if self.on_signal_changed:
+            self.on_signal_changed(self.get_signals())
+    
+    # ---- 数据接收 ----
     
     def _read_loop(self):
         """接收数据循环"""
