@@ -89,10 +89,16 @@ class ProtocolRegistry:
         from src.protocols.can_parser import CANParser
         from src.protocols.i2c_parser import I2CParser
         from src.protocols.uart_packet_parser import UARTPacketParser
+        from src.protocols.spi_parser import SPIParser
+        from src.protocols.lin_parser import LINParser
+        from src.protocols.dmx512_parser import DMX512Parser
         
         self.register(CANParser())
         self.register(I2CParser())
         self.register(UARTPacketParser())
+        self.register(SPIParser())
+        self.register(LINParser())
+        self.register(DMX512Parser())
     
     def register(self, parser: ProtocolParserBase):
         """注册协议解析器"""
