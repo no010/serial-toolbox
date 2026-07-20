@@ -13,36 +13,73 @@
 - **数据导出**: 日志导出为文本文件
 
 ### 技术栈
-- Python 3.11+
+- Python 3.10+
 - PyQt6 (GUI)
 - pyserial (串口通信)
 - pyqtgraph (实时绘图，预留接口)
 
-## 安装
+## 环境要求
+
+- [Python 3.10+](https://www.python.org/downloads/)
+- [uv](https://docs.astral.sh/uv/)（推荐的包/项目管理工具）
 
 ```bash
-# 安装依赖
-pip install -r requirements.txt
+# 安装 uv（Windows PowerShell）
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
+
+## 安装
+
+本项目使用 **uv** 进行项目管理，依赖在 `pyproject.toml` 中声明，并由 `uv.lock` 锁定版本。
+
+```bash
+# 同步运行时依赖（自动创建 .venv 并安装锁定版本）
+uv sync
+
+# 同时安装开发依赖（ruff / pytest）
+uv sync --group dev
+```
+
+> 如不使用 uv，也可回退到传统方式：`pip install -r requirements.txt`
 
 ## 运行
 
 ```bash
-python main.py
+# 方式一：直接运行入口脚本
+uv run main.py
+
+# 方式二：使用已注册的控制台命令
+uv run serial-toolbox
+```
+
+## 开发与构建
+
+```bash
+# 代码检查
+uv run ruff check src/
+
+# 运行测试
+uv run pytest
+
+# 构建发布包（wheel / sdist）
+uv build
 ```
 
 ## 项目结构
 
 ```
 serial-toolbox/
+├── pyproject.toml          # 项目元数据 & 依赖（uv 管理）
+├── uv.lock                 # 锁定依赖版本（提交到仓库）
+├── .python-version         # 固定 Python 版本
 ├── main.py                 # 主入口
-├── requirements.txt        # 依赖
+├── requirements.txt        # 依赖（非 uv 用户的回退方案）
 ├── src/
-│   ├── core/
-│   │   ├── serial_manager.py      # 串口管理
-│   │   └── protocol_parser.py     # 协议解析
-│   └── ui/
-│       └── main_window.py         # 主窗口 UI
+│   ├── core/                      # 核心：串口/协议/脚本/导出
+│   ├── protocols/                 # 内置协议解析器 & 模板解析
+│   └── ui/                        # PyQt6 界面
 └── scripts/                # 脚本工具
 ```
 

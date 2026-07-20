@@ -1,3 +1,16 @@
+# Aider
 .aider*
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+
+# 虚拟环境 & 构建产物
+.venv/
+dist/
+build/
+*.egg-info/
+
+# uv 本地缓存（uv.lock 需提交，勿忽略）
+.uv-cache/

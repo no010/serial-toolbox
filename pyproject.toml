@@ -1,0 +1,61 @@
+[project]
+name = "serial-toolbox"
+version = "0.1.0"
+description = "基于 Python + PyQt6 的多功能串口调试工具，适用于嵌入式开发"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["serial", "uart", "pyqt6", "modbus", "embedded", "debug"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Embedded Systems",
+    "Topic :: System :: Hardware",
+]
+dependencies = [
+    "PyQt6>=6.6.0",
+    "pyserial>=3.5",
+    "pyqtgraph>=0.13.3",
+    "numpy>=1.24.0",
+]
+
+# 开发依赖组：uv sync --group dev
+[dependency-groups]
+dev = [
+    "ruff>=0.4.0",
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+serial-toolbox = "src.ui.main_window:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# 顶层包为 src/（应用式 src 布局）
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "main.py", "README.md"]
+
+# ── 工具链配置 ─────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = [".venv", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]  # 行长度由 formatter 处理
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
