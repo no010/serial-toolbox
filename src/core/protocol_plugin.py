@@ -3,10 +3,10 @@
 支持自定义协议解析器，插件化扩展
 """
 
-from typing import Optional, Callable, Dict, Any, List
-from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 
 @dataclass
@@ -15,18 +15,18 @@ class ParsedFrame:
     protocol: str  # 协议名称
     timestamp: str = ""
     raw_data: bytes = b''
-    fields: Dict[str, Any] = field(default_factory=dict)
+    fields: dict[str, Any] = field(default_factory=dict)
     is_valid: bool = True
     error_msg: str = ""
-    
+
     def __post_init__(self):
         if not self.timestamp:
             self.timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
-    
+
     def get_field(self, name: str, default=None):
         """获取字段值"""
         return self.fields.get(name, default)
-    
+
     def to_dict(self) -> dict:
         """转换为字典"""
         return {
@@ -41,83 +41,95 @@ class ParsedFrame:
 
 class ProtocolParserBase(ABC):
     """协议解析器基类"""
-    
+
     name: str = "Unknown"
     description: str = ""
-    
+
     @abstractmethod
-    def parse(self, data: bytes) -> Optional[ParsedFrame]:
+    def parse(self, data: bytes) -> ParsedFrame | None:
         """
         解析数据帧
-        
+
         Args:
             data: 原始字节数据
-        
+
         Returns:
             解析后的帧，如果数据不完整返回 None
         """
         pass
-    
+
     @abstractmethod
     def detect_frame(self, data: bytes) -> tuple[bool, int]:
         """
         检测数据中是否包含完整帧
-        
+
         Returns:
             (is_complete, frame_length) - 是否完整，帧长度
         """
         pass
-    
+
     def build_frame(self, **kwargs) -> bytes:
         """构建帧 (可选实现)"""
         raise NotImplementedError(f"{self.name} 不支持构建帧")
-    
-    def get_fields_description(self) -> Dict[str, str]:
+
+    def get_fields_description(self) -> dict[str, str]:
         """获取字段说明"""
         return {}
 
 
 class ProtocolRegistry:
     """协议注册表"""
-    
+
     def __init__(self):
-        self.parsers: Dict[str, ProtocolParserBase] = {}
+        self.parsers: dict[str, ProtocolParserBase] = {}
+        self.template_manager = None
         self._register_built_in()
-    
+        self._register_templates()
+
     def _register_built_in(self):
         """注册内置协议"""
         from src.protocols.can_parser import CANParser
-        from src.protocols.i2c_parser import I2CParser
-        from src.protocols.uart_packet_parser import UARTPacketParser
-        from src.protocols.spi_parser import SPIParser
-        from src.protocols.lin_parser import LINParser
         from src.protocols.dmx512_parser import DMX512Parser
-        
+        from src.protocols.i2c_parser import I2CParser
+        from src.protocols.lin_parser import LINParser
+        from src.protocols.spi_parser import SPIParser
+        from src.protocols.uart_packet_parser import UARTPacketParser
+
         self.register(CANParser())
         self.register(I2CParser())
         self.register(UARTPacketParser())
         self.register(SPIParser())
         self.register(LINParser())
         self.register(DMX512Parser())
-    
+
+    def _register_templates(self):
+        """注册自定义模板协议"""
+        try:
+            from src.protocols.template_parser import ProtocolTemplateManager
+            self.template_manager = ProtocolTemplateManager()
+            for parser in self.template_manager.create_all_parsers():
+                self.register(parser)
+        except Exception as e:
+            print(f"加载自定义协议模板失败: {e}")
+
     def register(self, parser: ProtocolParserBase):
         """注册协议解析器"""
         self.parsers[parser.name] = parser
-    
+
     def unregister(self, name: str):
         """注销协议解析器"""
         if name in self.parsers:
             del self.parsers[name]
-    
-    def get_parser(self, name: str) -> Optional[ProtocolParserBase]:
+
+    def get_parser(self, name: str) -> ProtocolParserBase | None:
         """获取协议解析器"""
         return self.parsers.get(name)
-    
-    def list_protocols(self) -> List[str]:
+
+    def list_protocols(self) -> list[str]:
         """列出所有协议"""
         return list(self.parsers.keys())
-    
-    def auto_detect(self, data: bytes) -> Optional[str]:
+
+    def auto_detect(self, data: bytes) -> str | None:
         """自动检测协议"""
         for name, parser in self.parsers.items():
             is_complete, _ = parser.detect_frame(data)
@@ -130,17 +142,17 @@ class ProtocolRegistry:
 
 class StreamProtocolParser:
     """流式协议解析器 - 从字节流中自动识别并解析帧"""
-    
+
     def __init__(self, registry: ProtocolRegistry):
         self.registry = registry
         self.buffer = bytearray()
-        self.active_protocol: Optional[str] = None
-    
-    def feed(self, data: bytes) -> List[ParsedFrame]:
+        self.active_protocol: str | None = None
+
+    def feed(self, data: bytes) -> list[ParsedFrame]:
         """喂入数据，返回解析到的帧列表"""
         self.buffer.extend(data)
         frames = []
-        
+
         # 如果已确定协议，直接解析
         if self.active_protocol:
             parser = self.registry.get_parser(self.active_protocol)
@@ -169,13 +181,13 @@ class StreamProtocolParser:
                             frames.append(parsed)
                         del self.buffer[:frame_len]
                         break
-        
+
         return frames
-    
+
     def set_protocol(self, name: str):
         """手动设置协议"""
         self.active_protocol = name
-    
+
     def clear(self):
         """清空缓冲"""
         self.buffer.clear()

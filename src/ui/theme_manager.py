@@ -5,7 +5,6 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict
 
 
 class ThemeMode(Enum):
@@ -21,40 +20,40 @@ class ThemeColors:
     background: str
     surface: str
     surface_variant: str
-    
+
     # 文本色
     text_primary: str
     text_secondary: str
     text_disabled: str
-    
+
     # 边框色
     border: str
     border_light: str
-    
+
     # 按钮色
     button_primary: str
     button_primary_hover: str
     button_primary_pressed: str
     button_checked: str
     button_checked_hover: str
-    
+
     # 输入框
     input_background: str
     input_border: str
     input_text: str
-    
+
     # 表格
     table_grid: str
     table_selected_bg: str
     table_selected_text: str
-    
+
     # 状态栏
     status_bar_bg: str
-    
+
     # 终端/日志
     terminal_bg: str
     terminal_text: str
-    
+
     # 标签页
     tab_selected_bg: str
     tab_selected_text: str
@@ -119,36 +118,36 @@ LIGHT_THEME = ThemeColors(
 
 class ThemeManager:
     """主题管理器"""
-    
+
     def __init__(self):
         self.current_mode = ThemeMode.LIGHT
-        self.themes: Dict[ThemeMode, ThemeColors] = {
+        self.themes: dict[ThemeMode, ThemeColors] = {
             ThemeMode.LIGHT: LIGHT_THEME,
             ThemeMode.DARK: DARK_THEME,
         }
-    
+
     def get_theme(self, mode: ThemeMode = None) -> ThemeColors:
         """获取主题"""
         if mode is None:
             mode = self.current_mode
         return self.themes.get(mode, LIGHT_THEME)
-    
+
     def set_mode(self, mode: ThemeMode):
         """设置主题模式"""
         self.current_mode = mode
-    
+
     def toggle(self):
         """切换主题"""
         if self.current_mode == ThemeMode.LIGHT:
             self.current_mode = ThemeMode.DARK
         else:
             self.current_mode = ThemeMode.LIGHT
-    
+
     def generate_stylesheet(self, theme: ThemeColors = None) -> str:
         """生成 QSS 样式表"""
         if theme is None:
             theme = self.get_theme()
-        
+
         return f"""
             QMainWindow {{
                 background-color: {theme.background};
@@ -307,7 +306,7 @@ class ThemeManager:
                 background-color: {theme.background};
             }}
         """
-    
+
     def get_current_mode(self) -> ThemeMode:
         """获取当前模式"""
         return self.current_mode

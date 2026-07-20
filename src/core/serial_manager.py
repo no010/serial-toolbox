@@ -3,13 +3,14 @@
 负责串口扫描、连接、数据收发、信号线控制
 """
 
-import serial
-import serial.tools.list_ports
 import threading
 import time
-from typing import Optional, Callable, List
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
+
+import serial
+import serial.tools.list_ports
 
 
 class DataFormat(Enum):
@@ -32,22 +33,22 @@ class SerialConfig:
 
 class SerialManager:
     """串口管理器"""
-    
+
     def __init__(self):
-        self.serial: Optional[serial.Serial] = None
-        self.config: Optional[SerialConfig] = None
+        self.serial: serial.Serial | None = None
+        self.config: SerialConfig | None = None
         self.is_connected = False
-        self.read_thread: Optional[threading.Thread] = None
+        self.read_thread: threading.Thread | None = None
         self.stop_event = threading.Event()
-        
+
         # 回调函数
-        self.on_data_received: Optional[Callable[[bytes], None]] = None
-        self.on_error: Optional[Callable[[str], None]] = None
-        self.on_connection_changed: Optional[Callable[[bool], None]] = None
-        self.on_signal_changed: Optional[Callable[[dict], None]] = None
-    
+        self.on_data_received: Callable[[bytes], None] | None = None
+        self.on_error: Callable[[str], None] | None = None
+        self.on_connection_changed: Callable[[bool], None] | None = None
+        self.on_signal_changed: Callable[[dict], None] | None = None
+
     @staticmethod
-    def scan_ports() -> List[dict]:
+    def scan_ports() -> list[dict]:
         """扫描可用串口"""
         ports = serial.tools.list_ports.comports()
         result = []
@@ -62,15 +63,15 @@ class SerialManager:
                 'serial_number': port.serial_number,
             })
         return result
-    
+
     def connect(self, config: SerialConfig) -> bool:
         """连接串口"""
         try:
             if self.is_connected:
                 self.disconnect()
-            
+
             self.config = config
-            
+
             # 映射参数
             parity_map = {
                 'N': serial.PARITY_NONE,
@@ -84,7 +85,7 @@ class SerialManager:
                 1.5: serial.STOPBITS_ONE_POINT_FIVE,
                 2: serial.STOPBITS_TWO,
             }
-            
+
             self.serial = serial.Serial(
                 port=config.port,
                 baudrate=config.baudrate,
@@ -93,52 +94,52 @@ class SerialManager:
                 parity=parity_map.get(config.parity, serial.PARITY_NONE),
                 timeout=config.timeout,
             )
-            
+
             # 流控
             if config.flow_control == 'RTS/CTS':
                 self.serial.rtscts = True
             elif config.flow_control == 'XON/XOFF':
                 self.serial.xonxoff = True
-            
+
             self.is_connected = True
             self.stop_event.clear()
-            
+
             # 启动接收线程
             self.read_thread = threading.Thread(target=self._read_loop, daemon=True)
             self.read_thread.start()
-            
+
             if self.on_connection_changed:
                 self.on_connection_changed(True)
-            
+
             return True
-            
+
         except Exception as e:
             self.is_connected = False
             if self.on_error:
                 self.on_error(str(e))
             return False
-    
+
     def disconnect(self):
         """断开连接"""
         self.stop_event.set()
-        
+
         if self.read_thread and self.read_thread.is_alive():
             self.read_thread.join(timeout=1.0)
-        
+
         if self.serial and self.serial.is_open:
             self.serial.close()
-        
+
         self.serial = None
         self.is_connected = False
-        
+
         if self.on_connection_changed:
             self.on_connection_changed(False)
-    
+
     def send(self, data: bytes) -> bool:
         """发送数据"""
         if not self.is_connected or not self.serial:
             return False
-        
+
         try:
             self.serial.write(data)
             return True
@@ -146,7 +147,7 @@ class SerialManager:
             if self.on_error:
                 self.on_error(str(e))
             return False
-    
+
     def send_text(self, text: str, format: DataFormat = DataFormat.ASCII) -> bool:
         """发送文本"""
         try:
@@ -161,9 +162,9 @@ class SerialManager:
             if self.on_error:
                 self.on_error(f"发送失败: {e}")
             return False
-    
+
     # ---- 信号线控制 ----
-    
+
     def set_dtr(self, state: bool) -> bool:
         """设置 DTR 信号线"""
         if not self.is_connected or not self.serial:
@@ -176,7 +177,7 @@ class SerialManager:
             if self.on_error:
                 self.on_error(f"DTR 设置失败: {e}")
             return False
-    
+
     def set_rts(self, state: bool) -> bool:
         """设置 RTS 信号线"""
         if not self.is_connected or not self.serial:
@@ -189,7 +190,7 @@ class SerialManager:
             if self.on_error:
                 self.on_error(f"RTS 设置失败: {e}")
             return False
-    
+
     def get_signals(self) -> dict:
         """获取当前信号线状态"""
         if not self.serial or not self.is_connected:
@@ -205,14 +206,14 @@ class SerialManager:
             }
         except Exception:
             return {}
-    
+
     def _notify_signals(self):
         """通知信号线状态变化"""
         if self.on_signal_changed:
             self.on_signal_changed(self.get_signals())
-    
+
     # ---- 数据接收 ----
-    
+
     def _read_loop(self):
         """接收数据循环"""
         while not self.stop_event.is_set():
@@ -227,12 +228,12 @@ class SerialManager:
                 if self.on_error:
                     self.on_error(str(e))
                 break
-    
+
     def get_port_info(self) -> dict:
         """获取当前串口信息"""
         if not self.serial or not self.is_connected:
             return {}
-        
+
         return {
             'port': self.serial.port,
             'baudrate': self.serial.baudrate,
