@@ -32,6 +32,10 @@ dev = [
     "ruff>=0.4.0",
     "pytest>=8.0.0",
 ]
+# 打包依赖组：uv sync --group build
+build = [
+    "pyinstaller>=6.0.0",
+]
 
 [project.scripts]
 serial-toolbox = "src.ui.main_window:main"
