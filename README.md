@@ -67,6 +67,16 @@ uv run pytest
 uv build
 ```
 
+## 打包为可执行文件
+
+```bash
+uv sync --group build
+uv run pyinstaller serial-toolbox.spec --noconfirm --clean
+# 产物：dist/serial-toolbox.exe（Windows 单文件 GUI，无需安装 Python）
+```
+
+> 完整的交付说明、端到端验证清单与已知限制见 [DELIVERY.md](DELIVERY.md)。
+
 ## 项目结构
 
 ```
