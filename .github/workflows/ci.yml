@@ -39,3 +39,35 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: uv run pytest -q
+
+  # 打包冒烟测试：在 Windows 上构建可执行文件并作为产物上传
+  package:
+    needs: lint-and-test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.10
+
+      - name: Install dependencies
+        run: uv sync --group build
+
+      - name: Build executable (PyInstaller)
+        run: uv run pyinstaller serial-toolbox.spec --noconfirm --clean
+
+      - name: Verify artifact
+        shell: bash
+        run: test -f dist/serial-toolbox.exe && echo "OK dist/serial-toolbox.exe"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: serial-toolbox-windows
+          path: dist/serial-toolbox.exe
+

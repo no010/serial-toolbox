@@ -1,0 +1,17 @@
+# 使用项目锁定的工具版本（经 uv），与 CI 保持一致、避免版本漂移。
+# 安装: uv sync --group dev && uv run pre-commit install  (pre-commit 需另行安装)
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff (lint + 自动修复)
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
+
+      - id: ty-check
+        name: ty (类型检查)
+        entry: uv run ty check src/
+        language: system
+        pass_filenames: false
+        types: [python]
