@@ -68,6 +68,9 @@ uv run pytest
 
 # 构建发布包（wheel / sdist）
 uv build
+
+# 安装 pre-commit 钩子（提交前自动跑 ruff + ty）
+pip install pre-commit && pre-commit install
 ```
 
 ## 打包为可执行文件
