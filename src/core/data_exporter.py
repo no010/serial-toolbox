@@ -5,9 +5,12 @@
 
 import csv
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -105,8 +108,8 @@ class DataExporter:
                     writer.writerow(row)
 
             return True
-        except Exception as e:
-            print(f"CSV 导出失败: {e}")
+        except Exception:
+            logger.exception("CSV 导出失败")
             return False
 
     def export_json(self, filepath: str) -> bool:
@@ -138,8 +141,8 @@ class DataExporter:
                 json.dump(data, f, ensure_ascii=False, indent=2)
 
             return True
-        except Exception as e:
-            print(f"JSON 导出失败: {e}")
+        except Exception:
+            logger.exception("JSON 导出失败")
             return False
 
     def export_text(self, filepath: str) -> bool:
@@ -172,8 +175,8 @@ class DataExporter:
                     f.write("\n")
 
             return True
-        except Exception as e:
-            print(f"文本导出失败: {e}")
+        except Exception:
+            logger.exception("文本导出失败")
             return False
 
     def clear(self):

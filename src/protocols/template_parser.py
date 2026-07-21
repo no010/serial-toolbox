@@ -4,6 +4,7 @@
 """
 
 import json
+import logging
 import os
 import struct
 from dataclasses import asdict, dataclass, field
@@ -11,6 +12,8 @@ from dataclasses import fields as dataclass_fields
 from typing import Any
 
 from src.core.protocol_plugin import ParsedFrame, ProtocolParserBase
+
+logger = logging.getLogger(__name__)
 
 # ─── CRC 计算 ────────────────────────────────────────────────
 
@@ -420,8 +423,8 @@ class ProtocolTemplateManager:
             template = ProtocolTemplate.from_dict(data)
             self.templates[template.name] = template
             return template
-        except Exception as e:
-            print(f"加载模板失败 {filepath}: {e}")
+        except Exception:
+            logger.exception("加载模板失败 %s", filepath)
             return None
 
     # Windows 保留设备名，不能作为文件名

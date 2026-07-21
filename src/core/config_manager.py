@@ -4,9 +4,12 @@
 """
 
 import json
+import logging
 import os
 from dataclasses import asdict, dataclass, field
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -70,8 +73,8 @@ class ConfigManager:
                 for key, value in data.items():
                     if hasattr(self.config, key):
                         setattr(self.config, key, value)
-        except Exception as e:
-            print(f"加载配置失败: {e}")
+        except Exception:
+            logger.exception("加载配置失败")
         return self.config
 
     def save(self, config: AppConfig | None = None):
@@ -81,8 +84,8 @@ class ConfigManager:
         try:
             with open(self.CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(asdict(self.config), f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"保存配置失败: {e}")
+        except Exception:
+            logger.exception("保存配置失败")
 
     def get(self, key: str, default: Any = None) -> Any:
         """获取配置项"""

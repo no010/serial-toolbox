@@ -3,10 +3,13 @@
 支持自定义协议解析器，插件化扩展
 """
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -109,8 +112,8 @@ class ProtocolRegistry:
             self.template_manager = ProtocolTemplateManager()
             for parser in self.template_manager.create_all_parsers():
                 self.register(parser)
-        except Exception as e:
-            print(f"加载自定义协议模板失败: {e}")
+        except Exception:
+            logger.exception("加载自定义协议模板失败")
 
     def register(self, parser: ProtocolParserBase):
         """注册协议解析器"""

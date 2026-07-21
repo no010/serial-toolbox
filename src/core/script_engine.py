@@ -3,14 +3,16 @@
 支持 wait_response()、断点调试、更丰富的 API
 """
 
+import logging
 import threading
 import time
-import traceback
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class ScriptState(Enum):
@@ -312,7 +314,7 @@ class ScriptEngine:
         except Exception as e:
             error_msg = str(e)
             self._log(f"脚本执行错误: {e}")
-            traceback.print_exc()
+            logger.exception("脚本执行异常")
             self._set_state(ScriptState.ERROR)
 
         finally:
