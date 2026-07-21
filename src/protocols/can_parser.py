@@ -44,7 +44,8 @@ class CANParser(ProtocolParserBase):
             return False, 0
 
         # 计算帧长度: 帧头(1) + ID长度(1) + ID(N) + DLC(1) + DATA(DLC) + 帧尾(1)
-        if len(remaining) < 3:
+        # 需保证 DLC 下标 (2 + id_len) 不越界（流式部分帧场景）
+        if len(remaining) < 2 + id_len + 1:
             return False, 0
 
         dlc = remaining[2 + id_len]
@@ -137,10 +138,10 @@ class CANParser(ProtocolParserBase):
 
         if extended:
             frame.append(8)  # ID 长度
-            frame.extend(can_id.to_bytes(4, 'big'))
+            frame.extend(can_id.to_bytes(8, 'big'))
         else:
             frame.append(4)  # ID 长度
-            frame.extend(can_id.to_bytes(2, 'big'))
+            frame.extend(can_id.to_bytes(4, 'big'))
 
         frame.append(len(data))
         frame.extend(data)
