@@ -234,6 +234,7 @@ class ScriptEngine:
 
         success = False
         error_msg = ""
+        original_callback = None  # 在 try 外初始化，保证 finally 中可安全引用
 
         try:
             # 创建脚本上下文
