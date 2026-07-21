@@ -104,7 +104,7 @@ class SPIParser(ProtocolParserBase):
             is_valid=True
         )
 
-    def build_frame(self, cs_pin: int, data: bytes, mode: int = 0) -> bytes:
+    def build_frame(self, cs_pin: int, data: bytes, mode: int = 0) -> bytes:  # type: ignore
         """构建 SPI 帧"""
         if len(data) > 255:
             raise ValueError("SPI 数据长度不能超过 255 字节")

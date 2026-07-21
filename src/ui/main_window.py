@@ -10,7 +10,7 @@ from datetime import datetime
 import numpy as np
 import pyqtgraph as pg
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QAction, QFont, QTextCursor
+from PyQt6.QtGui import QAction, QCloseEvent, QFont, QTextCursor
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -445,9 +445,11 @@ class SerialToolboxMainWindow(QMainWindow):
     def create_menu_bar(self):
         """创建菜单栏"""
         menubar = self.menuBar()
+        assert menubar is not None
 
         # 文件菜单
         file_menu = menubar.addMenu('文件(&F)')
+        assert file_menu is not None
 
         export_action = QAction('导出日志(&E)', self)
         export_action.setShortcut('Ctrl+E')
@@ -463,6 +465,7 @@ class SerialToolboxMainWindow(QMainWindow):
 
         # 设置菜单
         settings_menu = menubar.addMenu('设置(&S)')
+        assert settings_menu is not None
 
         clear_action = QAction('清空显示(&C)', self)
         clear_action.setShortcut('Ctrl+L')
@@ -483,6 +486,7 @@ class SerialToolboxMainWindow(QMainWindow):
 
         # 帮助菜单
         help_menu = menubar.addMenu('帮助(&H)')
+        assert help_menu is not None
 
         about_action = QAction('关于(&A)', self)
         about_action.triggered.connect(self.show_about)
@@ -648,7 +652,9 @@ class SerialToolboxMainWindow(QMainWindow):
         self.protocol_table = QTableWidget()
         self.protocol_table.setColumnCount(5)
         self.protocol_table.setHorizontalHeaderLabels(['时间', '协议', '字段', '值', '原始数据'])
-        self.protocol_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        protocol_header = self.protocol_table.horizontalHeader()
+        assert protocol_header is not None
+        protocol_header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         protocol_layout.addWidget(self.protocol_table)
 
         tabs.addTab(protocol_widget, '🔌 协议解析')
@@ -721,9 +727,11 @@ class SerialToolboxMainWindow(QMainWindow):
         self.presets_table = QTableWidget()
         self.presets_table.setColumnCount(3)
         self.presets_table.setHorizontalHeaderLabels(['名称', '数据', 'HEX'])
-        self.presets_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.presets_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.presets_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        presets_header = self.presets_table.horizontalHeader()
+        assert presets_header is not None
+        presets_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        presets_header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        presets_header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self.presets_table.setMaximumHeight(150)
         self.presets_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.presets_table.doubleClicked.connect(self._send_preset)
@@ -759,7 +767,9 @@ class SerialToolboxMainWindow(QMainWindow):
 
     def create_status_bar(self):
         """创建状态栏"""
-        self.status_bar = self.statusBar()
+        status_bar = self.statusBar()
+        assert status_bar is not None
+        self.status_bar = status_bar
 
         self.connection_label = QLabel('未连接')
         self.connection_label.setStyleSheet('color: red;')
@@ -1020,9 +1030,12 @@ class SerialToolboxMainWindow(QMainWindow):
         row = self.presets_table.currentRow()
         if row < 0:
             return
-        name = self.presets_table.item(row, 0).text()
-        data = self.presets_table.item(row, 1).text()
-        is_hex = self.presets_table.item(row, 2).text() == '✓'
+        name_item = self.presets_table.item(row, 0)
+        data_item = self.presets_table.item(row, 1)
+        hex_item = self.presets_table.item(row, 2)
+        name = name_item.text() if name_item else ""
+        data = data_item.text() if data_item else ""
+        is_hex = (hex_item.text() == '✓') if hex_item else False
 
         dialog = PresetEditDialog(self, name, data, is_hex)
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -1052,8 +1065,10 @@ class SerialToolboxMainWindow(QMainWindow):
             QMessageBox.warning(self, '警告', '串口未连接')
             return
 
-        data_text = self.presets_table.item(row, 1).text()
-        is_hex = self.presets_table.item(row, 2).text() == '✓'
+        data_item = self.presets_table.item(row, 1)
+        hex_item = self.presets_table.item(row, 2)
+        data_text = data_item.text() if data_item else ""
+        is_hex = (hex_item.text() == '✓') if hex_item else False
 
         fmt = DataFormat.HEX if is_hex else DataFormat.ASCII
         if self.serial_manager.send_text(data_text, fmt):
@@ -1155,7 +1170,9 @@ class SerialToolboxMainWindow(QMainWindow):
         if connected:
             self.connect_btn.setText('断开')
             self.connect_btn.setChecked(True)
-            self.connection_label.setText(f'已连接: {self.serial_manager.config.port}')
+            config = self.serial_manager.config
+            port = config.port if config else "?"
+            self.connection_label.setText(f'已连接: {port}')
             self.connection_label.setStyleSheet('color: green;')
             self.set_controls_enabled(False)
         else:
@@ -1271,7 +1288,7 @@ class SerialToolboxMainWindow(QMainWindow):
             '基于 PyQt6 + pyqtgraph 开发'
         )
 
-    def closeEvent(self, event):
+    def closeEvent(self, a0: QCloseEvent | None) -> None:  # noqa: N803 - 名称需匹配 Qt 桩
         """窗口关闭事件"""
         # 断开连接
         if self.serial_manager.is_connected:
@@ -1286,7 +1303,8 @@ class SerialToolboxMainWindow(QMainWindow):
 
         # 保存配置
         self.save_config()
-        event.accept()
+        if a0 is not None:
+            a0.accept()
 
     def apply_styles(self):
         """应用样式"""

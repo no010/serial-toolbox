@@ -126,7 +126,7 @@ class ThemeManager:
             ThemeMode.DARK: DARK_THEME,
         }
 
-    def get_theme(self, mode: ThemeMode = None) -> ThemeColors:
+    def get_theme(self, mode: ThemeMode | None = None) -> ThemeColors:
         """获取主题"""
         if mode is None:
             mode = self.current_mode
@@ -143,7 +143,7 @@ class ThemeManager:
         else:
             self.current_mode = ThemeMode.LIGHT
 
-    def generate_stylesheet(self, theme: ThemeColors = None) -> str:
+    def generate_stylesheet(self, theme: ThemeColors | None = None) -> str:
         """生成 QSS 样式表"""
         if theme is None:
             theme = self.get_theme()

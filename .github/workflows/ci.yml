@@ -32,6 +32,9 @@ jobs:
       - name: Lint (ruff)
         run: uv run ruff check src/ tests/
 
+      - name: Type check (ty)
+        run: uv run ty check src/
+
       - name: Test (pytest, offscreen Qt)
         env:
           QT_QPA_PLATFORM: offscreen

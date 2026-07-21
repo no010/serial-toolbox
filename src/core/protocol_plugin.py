@@ -184,7 +184,7 @@ class StreamProtocolParser:
 
         return frames
 
-    def set_protocol(self, name: str):
+    def set_protocol(self, name: str | None):
         """手动设置协议"""
         self.active_protocol = name
 

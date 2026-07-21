@@ -60,6 +60,9 @@ uv run serial-toolbox
 # 代码检查
 uv run ruff check src/
 
+# 类型检查（ty，Astral 出品的 Rust 类型检查器）
+uv run ty check src/
+
 # 运行测试
 uv run pytest
 

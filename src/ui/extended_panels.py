@@ -72,7 +72,9 @@ class ModbusResponsePanel(QGroupBox):
         self.response_table.setHorizontalHeaderLabels([
             '时间', '从机', '功能码', '寄存器地址', '原始值', '有符号值'
         ])
-        self.response_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        response_header = self.response_table.horizontalHeader()
+        assert response_header is not None
+        response_header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.response_table.setMaximumHeight(200)
         layout.addWidget(self.response_table)
 
@@ -82,7 +84,9 @@ class ModbusResponsePanel(QGroupBox):
         self.register_table.setHorizontalHeaderLabels([
             '地址', 'HEX', 'DEC (有符号)', 'Float (IEEE754)'
         ])
-        self.register_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        register_header = self.register_table.horizontalHeader()
+        assert register_header is not None
+        register_header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.register_table.setMaximumHeight(150)
         layout.addWidget(QLabel('寄存器详情:'))
         layout.addWidget(self.register_table)
@@ -166,7 +170,7 @@ class ModbusResponsePanel(QGroupBox):
 class LogSettingsDialog(QDialog):
     """日志设置对话框"""
 
-    def __init__(self, parent=None, config: LogConfig = None):
+    def __init__(self, parent=None, config: LogConfig | None = None):
         super().__init__(parent)
         self.setWindowTitle("日志设置")
         self.setFixedSize(450, 300)
@@ -523,8 +527,11 @@ class ProtocolTemplateDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Close
         )
-        buttons.button(QDialogButtonBox.StandardButton.Save).clicked.connect(self._save_template)
-        buttons.button(QDialogButtonBox.StandardButton.Close).clicked.connect(self.reject)
+        save_btn = buttons.button(QDialogButtonBox.StandardButton.Save)
+        close_btn = buttons.button(QDialogButtonBox.StandardButton.Close)
+        assert save_btn is not None and close_btn is not None
+        save_btn.clicked.connect(self._save_template)
+        close_btn.clicked.connect(self.reject)
         layout.addWidget(buttons)
 
     def refresh_template_list(self):

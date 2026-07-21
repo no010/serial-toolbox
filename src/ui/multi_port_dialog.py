@@ -27,7 +27,7 @@ class MultiPortConfigDialog(QDialog):
     def __init__(self, parent=None, slot_name: str = "Port A"):
         super().__init__(parent)
         self.slot_name = slot_name
-        self.config: SerialConfig = None
+        self.config: SerialConfig | None = None
         self.init_ui()
         self.scan_ports()
 
@@ -110,7 +110,7 @@ class MultiPortConfigDialog(QDialog):
             display_text = f"{port['device']} - {port['description']}"
             self.port_combo.addItem(display_text, port['device'])
 
-    def get_config(self) -> SerialConfig:
+    def get_config(self) -> SerialConfig | None:
         """获取配置"""
         if self.port_combo.count() == 0:
             return None

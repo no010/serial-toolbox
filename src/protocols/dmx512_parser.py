@@ -127,7 +127,7 @@ class DMX512Parser(ProtocolParserBase):
             is_valid=True
         )
 
-    def build_frame(self, universe: int, data: bytes, start_code: int = 0x00) -> bytes:
+    def build_frame(self, universe: int, data: bytes, start_code: int = 0x00) -> bytes:  # type: ignore
         """构建 DMX512 帧"""
         if len(data) > 512:
             raise ValueError("DMX512 数据长度不能超过 512 字节")

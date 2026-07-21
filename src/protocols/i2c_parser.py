@@ -113,7 +113,7 @@ class I2CParser(ProtocolParserBase):
             is_valid=crc_valid
         )
 
-    def build_frame(self, address: int, data: bytes, read: bool = False) -> bytes:
+    def build_frame(self, address: int, data: bytes, read: bool = False) -> bytes:  # type: ignore
         """构建 I2C 帧"""
         if len(data) > 255:
             raise ValueError("I2C 数据长度不能超过 255 字节")

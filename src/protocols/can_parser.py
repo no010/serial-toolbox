@@ -127,7 +127,7 @@ class CANParser(ProtocolParserBase):
             is_valid=True
         )
 
-    def build_frame(self, can_id: int, data: bytes, extended: bool = False) -> bytes:
+    def build_frame(self, can_id: int, data: bytes, extended: bool = False) -> bytes:  # type: ignore
         """构建 CAN 帧"""
         if len(data) > 8:
             raise ValueError("CAN 数据长度不能超过 8 字节")

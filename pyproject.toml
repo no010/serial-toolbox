@@ -31,6 +31,7 @@ dependencies = [
 dev = [
     "ruff>=0.4.0",
     "pytest>=8.0.0",
+    "ty>=0.0.61",
 ]
 # 打包依赖组：uv sync --group build
 build = [
@@ -63,3 +64,10 @@ ignore = ["E501"]  # 行长度由 formatter 处理
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# ── 类型检查 (ty, Astral 出品的 Rust 类型检查器) ──────────────
+# 选型说明：相比 pyright，ty 与本项目已采用的 uv + ruff 同属 Astral/Rust 工具链，
+# 无需 Node 运行时、速度更快、CI 集成更简单；本项目 51 处诊断均可被其准确识别。
+[tool.ty.environment]
+python-version = "3.10"
+

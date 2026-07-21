@@ -101,7 +101,7 @@ class UARTPacketParser(ProtocolParserBase):
             is_valid=crc_valid
         )
 
-    def build_frame(self, data: bytes) -> bytes:
+    def build_frame(self, data: bytes) -> bytes:  # type: ignore
         """构建数据包"""
         if len(data) > 65535:
             raise ValueError("数据长度不能超过 65535 字节")

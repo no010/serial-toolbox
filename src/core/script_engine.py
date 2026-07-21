@@ -65,7 +65,7 @@ class ScriptContext:
             self.response_buffer.extend(data)
 
     def wait_response(self, timeout: float = 1.0, expected_length: int = 0,
-                      terminator: bytes = None) -> bytes:
+                      terminator: bytes | None = None) -> bytes:
         """
         等待响应数据
 
@@ -245,7 +245,8 @@ class ScriptEngine:
             # 连接响应数据
             original_callback = self.serial_manager.on_data_received
             def data_callback(data):
-                self._context.feed_response(data)
+                if self._context:
+                    self._context.feed_response(data)
                 if original_callback:
                     original_callback(data)
             self.serial_manager.on_data_received = data_callback

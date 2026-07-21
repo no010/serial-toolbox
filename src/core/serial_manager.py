@@ -25,7 +25,7 @@ class SerialConfig:
     port: str
     baudrate: int = 115200
     data_bits: int = 8
-    stop_bits: int = 1
+    stop_bits: float = 1
     parity: str = 'N'  # N, E, O, M, S
     flow_control: str = 'None'  # None, RTS/CTS, XON/XOFF
     timeout: float = 0.1

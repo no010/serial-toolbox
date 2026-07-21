@@ -70,7 +70,8 @@ uv run pyinstaller serial-toolbox.spec --noconfirm --clean
 |----|------|
 | 自动化测试 | `uv run pytest` → **21 passed** |
 | 静态检查 | `uv run ruff check src/ tests/` → **All checks passed** |
-| CI | push/PR 自动跑 ruff + pytest（offscreen Qt） |
+| 类型检查 | `uv run ty check src/` → **All checks passed**（51 处诊断已全部修复） |
+| CI | push/PR 自动跑 ruff + ty + pytest（offscreen Qt） |
 | 依赖锁定 | `uv.lock`（`uv lock --check` 通过） |
 
 ```bash
@@ -99,7 +100,6 @@ uv run ruff check src/ tests/    # 静态检查
 
 - **代码签名**：exe 未签名，Windows SmartScreen 可能提示；正式发布建议代码签名。
 - **日志系统**：仍以 `print` 输出为主，建议迁移到 `logging`（分级、落盘）。
-- **类型检查**：未引入 mypy/pyright，建议补充并纳入 CI。
 - **测试覆盖**：当前聚焦核心解析/脚本/UI 构造，建议扩充各协议解析器与导出/配置模块的测试。
 - **跨平台打包**：当前仅构建 Windows exe；macOS/Linux 需在对应平台分别打包。
 

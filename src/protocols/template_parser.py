@@ -387,7 +387,7 @@ class TemplateProtocolParser(ProtocolParserBase):
 class ProtocolTemplateManager:
     """协议模板管理器"""
 
-    def __init__(self, template_dir: str = None):
+    def __init__(self, template_dir: str | None = None):
         self.template_dir = template_dir or os.path.join(
             os.path.expanduser("~"), ".serial-toolbox", "templates"
         )

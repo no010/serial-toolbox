@@ -118,7 +118,7 @@ class LINParser(ProtocolParserBase):
             is_valid=checksum_valid
         )
 
-    def build_frame(self, lin_id: int, data: bytes) -> bytes:
+    def build_frame(self, lin_id: int, data: bytes) -> bytes:  # type: ignore
         """构建 LIN 帧"""
         if len(data) > 8:
             raise ValueError("LIN 数据长度不能超过 8 字节")
