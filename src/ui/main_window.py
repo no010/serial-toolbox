@@ -915,7 +915,6 @@ class SerialToolboxMainWindow(QMainWindow):
 
         if self.serial_manager.send_text(text, fmt):
             self.sent_bytes += len(text.encode('utf-8'))
-            self.send_input.clear()
 
             # 日志记录
             self.log_writer.write_tx(text.encode('utf-8'), self.hex_send_check.isChecked())
