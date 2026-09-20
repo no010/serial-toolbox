@@ -121,7 +121,34 @@ from src.core.protocol_parser import ModbusRTU
 # 读取保持寄存器（从机地址 1，起始地址 0，数量 10）
 frame = ModbusRTU.build_read_holding_registers(1, 0, 10)
 # 发送 frame
+
+# 正常响应长度 = 5 + 2N（异常响应恒为 5 字节）
+expected = ModbusRTU.expected_response_length(0x03, 10)  # 25
+# 脚本里：resp = wait_response(timeout=0.3, expected_length=expected)
 ```
+
+`expected_length` 请由 `expected_response_length()` 算出，不要写死字面量：长度小于实际帧长时，多出来的字节会留到下一次等待里，把下一帧的帧头串掉。
+
+### Python 脚本引擎
+「🐍 脚本引擎」标签页可运行 Python 脚本，注入的 API 有 `send` / `send_bytes` / `wait_response` /
+`clear_response` / `sleep` / `log_info` / `log_error` / `log_success` / `assert_equal` /
+`assert_contains` / `set_breakpoint`，并支持**运行 / 暂停 / 恢复 / 单步 / 停止**。
+
+脚本按顶层语句切分执行，`for` / `if` / `def` 等缩进块作为整体运行；因此暂停、单步与断点都停在
+**顶层语句边界**，块内部的断点是在整块开始执行前停下。
+
+### 数据曲线图
+「📈 波形」标签页是数据曲线图，每条**通道绑定一个数据来源**（最多 8 条）：
+
+| 来源 | 取数方式 |
+|------|----------|
+| 原始字节流 | 按字节值 / int16(大端) / float32(大端) 解码接收到的每一块数据 |
+| 协议字段 | 自定义 JSON 模板或内置协议解析出的字段名（下拉会列出见过的字段） |
+| Modbus 寄存器 | 按寄存器地址取解析出的值（有 Float 解释时用 Float） |
+
+配套：X 轴可切「采样点 / 时间(s)」、⏸ 冻结（只停刷新，仍在采样）与「采集」开关（停采样）、
+自动缩放、XY 李萨如模式、通道配色与显隐、两条光标的 ΔX/ΔY 读数、导出 CSV。
+非数值字段不会被画成假点，只累计跳过计数；通道定义与 X 轴模式随配置持久化。
 
 ## 开发计划
 

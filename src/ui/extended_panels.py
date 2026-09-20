@@ -91,11 +91,12 @@ class ModbusResponsePanel(QGroupBox):
         layout.addWidget(QLabel('寄存器详情:'))
         layout.addWidget(self.register_table)
 
-    def feed_data(self, data: bytes):
-        """喂入数据，自动解析"""
+    def feed_data(self, data: bytes) -> list[ModbusResponse]:
+        """喂入数据，自动解析；返回解析出的响应供其他消费者（如图表寄存器通道）复用"""
         responses = self.parser.feed(data)
         for resp in responses:
             self._add_response(resp)
+        return responses
 
     def _add_response(self, resp: ModbusResponse):
         """添加响应到表格"""
@@ -280,6 +281,18 @@ class ScriptEditorPanel(QGroupBox):
 
     send_data = pyqtSignal(bytes)
     script_log = pyqtSignal(str)
+    script_finished = pyqtSignal(bool, str)
+    script_state_changed = pyqtSignal(str)
+
+    _STATE_LABELS = {
+        'idle': '空闲',
+        'running': '运行中',
+        'paused': '已暂停',
+        'stopped': '已结束',
+        'error': '出错',
+        'breakpoint': '断点暂停',
+    }
+    _RUNNING_STATES = ('running', 'paused', 'breakpoint')
 
     def __init__(self, serial_manager=None):
         super().__init__('Python 脚本引擎')
@@ -289,6 +302,8 @@ class ScriptEditorPanel(QGroupBox):
             # 引擎在工作线程中回调，经信号跨线程安全地更新 UI；
             # 主窗口将 script_log 连接到 append_log（见 main_window._connect_signals）
             self.engine.on_log = self.script_log.emit
+            self.engine.on_finished = self.script_finished.emit
+            self.engine.on_state_changed = lambda state: self.script_state_changed.emit(state.value)
         self.init_ui()
 
     def init_ui(self):
@@ -302,9 +317,25 @@ class ScriptEditorPanel(QGroupBox):
         self.example_combo.currentTextChanged.connect(self._load_example)
         ctrl.addWidget(self.example_combo)
 
-        run_btn = QPushButton('▶️ 运行')
-        run_btn.clicked.connect(self._run_script)
-        ctrl.addWidget(run_btn)
+        self.run_btn = QPushButton('▶️ 运行')
+        self.run_btn.clicked.connect(self._run_script)
+        ctrl.addWidget(self.run_btn)
+
+        self.pause_btn = QPushButton('⏸ 暂停')
+        self.pause_btn.clicked.connect(self._pause_script)
+        ctrl.addWidget(self.pause_btn)
+
+        self.resume_btn = QPushButton('▶ 恢复')
+        self.resume_btn.clicked.connect(self._resume_script)
+        ctrl.addWidget(self.resume_btn)
+
+        self.step_btn = QPushButton('⏭ 单步')
+        self.step_btn.clicked.connect(self._step_script)
+        ctrl.addWidget(self.step_btn)
+
+        self.stop_btn = QPushButton('⏹ 停止')
+        self.stop_btn.clicked.connect(self._stop_script)
+        ctrl.addWidget(self.stop_btn)
 
         clear_btn = QPushButton('清空输出')
         clear_btn.clicked.connect(self._clear_output)
@@ -319,15 +350,24 @@ class ScriptEditorPanel(QGroupBox):
         layout.addWidget(self.code_edit)
 
         # 输出区
-        layout.addWidget(QLabel('输出:'))
+        head = QHBoxLayout()
+        head.addWidget(QLabel('输出:'))
+        self.state_label = QLabel()
+        head.addWidget(self.state_label)
+        head.addStretch()
+        layout.addLayout(head)
         self.output_text = QTextEdit()
         self.output_text.setReadOnly(True)
         self.output_text.setFont(QFont('Consolas', 9))
         self.output_text.setMaximumHeight(150)
         layout.addWidget(self.output_text)
 
-        # 加载默认示例
-        self._load_example('发送递增字节')
+        self.script_finished.connect(self._on_engine_finished)
+        self.script_state_changed.connect(self._on_engine_state)
+
+        # 加载下拉框当前选中的示例（此前写死了一个不存在的示例名，代码区一直是空的）
+        self._load_example(self.example_combo.currentText())
+        self._update_controls('idle')
 
     def _load_example(self, name: str):
         """加载示例脚本"""
@@ -336,10 +376,48 @@ class ScriptEditorPanel(QGroupBox):
 
     def _run_script(self):
         """运行脚本"""
-        code = self.code_edit.toPlainText()
+        if not self.engine:
+            self.output_text.append("未提供串口管理器，脚本引擎不可用")
+            return
+        self.engine.execute(self.code_edit.toPlainText())
+
+    def _pause_script(self):
+        """暂停脚本"""
         if self.engine:
-            self.engine.execute(code)
-        self.output_text.append("脚本执行完毕")
+            self.engine.pause()
+
+    def _resume_script(self):
+        """恢复脚本"""
+        if self.engine:
+            self.engine.resume()
+
+    def _step_script(self):
+        """单步执行脚本"""
+        if self.engine:
+            self.engine.step_over()
+
+    def _stop_script(self):
+        """停止脚本"""
+        if self.engine:
+            self.engine.stop()
+
+    def _on_engine_state(self, state: str):
+        """引擎状态变化（由 script_state_changed 跨线程触发）"""
+        self._update_controls(state)
+
+    def _update_controls(self, state: str):
+        """按引擎状态切换按钮可用性，避免运行结束后按钮失真"""
+        self.state_label.setText(f'状态: {self._STATE_LABELS.get(state, state)}')
+        running = state in self._RUNNING_STATES
+        self.run_btn.setEnabled(self.engine is not None and not running)
+        self.pause_btn.setEnabled(state == 'running')
+        self.resume_btn.setEnabled(state in ('paused', 'breakpoint'))
+        self.step_btn.setEnabled(state in ('paused', 'breakpoint'))
+        self.stop_btn.setEnabled(running)
+
+    def _on_engine_finished(self, success: bool, msg: str):
+        """脚本结束（由 script_finished 跨线程触发）"""
+        self.output_text.append(f"脚本执行完毕: {msg}" if success else f"脚本执行失败: {msg}")
 
     @pyqtSlot(str)
     def append_log(self, msg: str):

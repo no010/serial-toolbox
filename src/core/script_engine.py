@@ -3,6 +3,7 @@
 支持 wait_response()、断点调试、更丰富的 API
 """
 
+import ast
 import logging
 import threading
 import time
@@ -31,6 +32,46 @@ class Breakpoint:
     line: int
     enabled: bool = True
     condition: str = ""  # 可选条件表达式
+
+
+@dataclass(frozen=True)
+class _StatementUnit:
+    """脚本中的一个顶层语句单元（连同其缩进块），exec 与断点的最小粒度"""
+    start_line: int
+    end_line: int
+    source: str  # 语句源码，前面补齐空行使 compile 出的行号与脚本绝对行号一致
+
+
+def _split_top_level_units(script: str) -> list[_StatementUnit]:
+    """
+    用 AST 按顶层语句切分脚本。
+
+    缩进块（for/if/while/def/with）必须整体交给 exec 才能运行，块内单行单独 exec
+    只会抛 IndentationError，因此顶层语句就是可行的最小执行与断点粒度。
+    """
+    lines = script.splitlines()
+    units: list[_StatementUnit] = []
+    for node in ast.parse(script, filename='<script>').body:
+        start = node.lineno
+        decorators = getattr(node, 'decorator_list', [])
+        if decorators:
+            start = min(start, min(d.lineno for d in decorators))
+        end = node.end_lineno or start
+        source = '\n' * (start - 1) + '\n'.join(lines[start - 1:end])
+        units.append(_StatementUnit(start, end, source))
+    return units
+
+
+def _script_line_hint(exc: BaseException) -> str:
+    """取脚本自身帧的行号拼进错误信息；行号已按脚本对齐，可直接对照编辑器"""
+    tb = exc.__traceback__
+    while tb is not None:
+        if tb.tb_frame.f_code.co_filename == '<script>':
+            return f" (第 {tb.tb_lineno} 行)"
+        tb = tb.tb_next
+    if isinstance(exc, SyntaxError) and exc.lineno:
+        return f" (第 {exc.lineno} 行)"
+    return ""
 
 
 @dataclass
@@ -73,7 +114,8 @@ class ScriptContext:
 
         Args:
             timeout: 超时时间 (秒)
-            expected_length: 期望接收的字节数 (0=任意)
+            expected_length: 期望接收的字节数 (0=任意)。满足时返回值恰好为该长度，
+                多收到的字节留在缓冲区由下一次等待取走；仅超时时返回已收到的部分。
             terminator: 结束标志字节 (如 b'\\r\\n')
 
         Returns:
@@ -93,6 +135,10 @@ class ScriptContext:
 
                     # 检查是否满足条件
                     if expected_length > 0 and len(result) >= expected_length:
+                        # 多收的字节放回缓冲区交给下一次等待，避免帧尾被吞或混进后续帧
+                        if len(result) > expected_length:
+                            self.response_buffer.extend(result[expected_length:])
+                            del result[expected_length:]
                         return bytes(result)
                     if terminator and terminator in result:
                         return bytes(result)
@@ -153,8 +199,12 @@ class ScriptContext:
             del self.breakpoints[line]
             self.log(f"[断点] 移除第 {line} 行断点")
 
-    def check_breakpoint(self, line: int):
-        """检查是否命中断点"""
+    def check_breakpoint(self, line: int, on_pause: Callable[[], None] | None = None):
+        """
+        检查是否命中断点，命中则阻塞到被唤醒。
+
+        on_pause 在真正进入等待前回调（引擎据此切换状态），未命中时不会被调用。
+        """
         if line in self.breakpoints:
             bp = self.breakpoints[line]
             if bp.enabled:
@@ -166,10 +216,13 @@ class ScriptContext:
                     except Exception:
                         pass
 
-                self.log(f"[断点] 命中第 {line} 行断点")
                 self.pause_flag.clear()
                 self.step_mode = True
-                # 进入断点暂停状态
+                if on_pause:
+                    on_pause()
+                # clear 必须先于该日志：外部以这条日志为信号调用 resume()，
+                # 若 set 落在 clear 之前会被抹掉，脚本将永久停在 wait()
+                self.log(f"[断点] 命中第 {line} 行断点")
                 self.pause_flag.wait()
 
     def step(self):
@@ -238,83 +291,71 @@ class ScriptEngine:
 
         try:
             # 创建脚本上下文
-            self._context = ScriptContext(
+            context = ScriptContext(
                 serial_manager=self.serial_manager,
                 log=self._log,
                 sleep=self._interruptible_sleep,
                 stop_flag=self.stop_event
             )
+            context.pause_flag.set()      # 未暂停是初态，闸门才不会一开始就挡住脚本
+            self._context = context
 
             # 连接响应数据
             original_callback = self.serial_manager.on_data_received
             def data_callback(data):
-                if self._context:
-                    self._context.feed_response(data)
+                context.feed_response(data)
                 if original_callback:
                     original_callback(data)
             self.serial_manager.on_data_received = data_callback
 
             # 构建脚本环境
             script_env = {
-                'ctx': self._context,
-                'send': self._context.send,
-                'send_bytes': self._context.send_bytes,
-                'sleep': self._context.sleep,
-                'wait_response': self._context.wait_response,
-                'clear_response': self._context.clear_response_buffer,
-                'log': self._context.log_info,
-                'log_info': self._context.log_info,
-                'log_error': self._context.log_error,
-                'log_success': self._context.log_success,
-                'log_debug': self._context.log_debug,
-                'assert_equal': self._context.assert_equal,
-                'assert_contains': self._context.assert_contains,
-                'set_breakpoint': self._context.set_breakpoint,
-                'remove_breakpoint': self._context.remove_breakpoint,
+                'ctx': context,
+                'send': context.send,
+                'send_bytes': context.send_bytes,
+                'sleep': context.sleep,
+                'wait_response': context.wait_response,
+                'clear_response': context.clear_response_buffer,
+                'log': context.log_info,
+                'log_info': context.log_info,
+                'log_error': context.log_error,
+                'log_success': context.log_success,
+                'log_debug': context.log_debug,
+                'assert_equal': context.assert_equal,
+                'assert_contains': context.assert_contains,
+                'set_breakpoint': context.set_breakpoint,
+                'remove_breakpoint': context.remove_breakpoint,
                 'stop': self.stop,
             }
 
-            # 逐行执行以支持断点
-            lines = self._current_script.split('\n')
-            for line_num, line in enumerate(lines, 1):
+            # 按顶层语句逐个执行：缩进块必须整体交给 exec，块内单行无法独立运行
+            for unit in _split_top_level_units(self._current_script):
                 if self.stop_event.is_set():
                     break
 
-                # 检查断点
-                self._context.current_line = line_num
-                self._context.check_breakpoint(line_num)
+                context.current_line = unit.start_line
+                self._wait_for_resume(context)
+                self._hit_breakpoint(context, unit)
 
                 if self.on_line_executed:
-                    self.on_line_executed(line_num)
+                    self.on_line_executed(unit.start_line)
 
-                # 跳过空行和注释
-                stripped = line.strip()
-                if not stripped or stripped.startswith('#'):
-                    continue
+                exec(compile(unit.source, '<script>', 'exec'), script_env)
+                self._step_after_unit(context)
 
-                # 执行当前行
-                try:
-                    exec(line, script_env)
-                except IndentationError:
-                    # 多行语句，收集完整块
-                    block = line
-                    while line_num < len(lines):
-                        line_num += 1
-                        line = lines[line_num - 1]
-                        block += '\n' + line
-                        # 简单判断块结束
-                        if line.strip() and not line.startswith(' ') and not line.startswith('\t'):
-                            break
-                    exec(block, script_env)
+            # stop() 会让上面的循环 break 出来，不能随后又报"执行成功"
+            if self.stop_event.is_set():
+                raise InterruptedError("脚本已停止")
 
             success = True
             self._log("脚本执行完成")
 
         except InterruptedError:
+            error_msg = "已被用户停止"
             self._log("脚本被用户停止")
         except Exception as e:
-            error_msg = str(e)
-            self._log(f"脚本执行错误: {e}")
+            error_msg = f"{e}{_script_line_hint(e)}"
+            self._log(f"脚本执行错误: {error_msg}")
             logger.exception("脚本执行异常")
             self._set_state(ScriptState.ERROR)
 
@@ -330,6 +371,42 @@ class ScriptEngine:
 
         if self.state != ScriptState.ERROR:
             self._set_state(ScriptState.STOPPED)
+
+    def _wait_for_resume(self, context: ScriptContext):
+        """手动暂停时停在语句边界，直到恢复或被停止"""
+        while not context.pause_flag.wait(0.05):
+            if self.stop_event.is_set():
+                raise InterruptedError("脚本已停止")
+            if self.state == ScriptState.RUNNING:
+                self._set_state(ScriptState.PAUSED)
+
+    def _step_after_unit(self, context: ScriptContext):
+        """单步：本条顶层语句执行完就停在下一条之前"""
+        if context.step_mode:
+            context.step_mode = False
+            context.pause_flag.clear()
+            self._set_state(ScriptState.PAUSED)
+
+    def _hit_breakpoint(self, context: ScriptContext, unit: _StatementUnit):
+        """
+        命中该顶层语句行号范围内的第一个断点。
+
+        缩进块只能整体交给 exec，所以块内的断点是在整块开始执行前停下，而非逐行停下。
+        """
+        for line in range(unit.start_line, unit.end_line + 1):
+            if line in context.breakpoints:
+                context.current_line = line
+                context.check_breakpoint(
+                    line, lambda paused=line: self._pause_at_breakpoint(paused))
+                if self.state == ScriptState.BREAKPOINT:
+                    self._set_state(ScriptState.RUNNING)
+                return
+
+    def _pause_at_breakpoint(self, line: int):
+        """进入断点等待前通知外部并把状态切出去，否则 resume() 认不出这是可恢复的暂停"""
+        self._set_state(ScriptState.BREAKPOINT)
+        if self.on_breakpoint:
+            self.on_breakpoint(line)
 
     def _interruptible_sleep(self, seconds: float):
         """可中断的睡眠"""
@@ -354,15 +431,17 @@ class ScriptEngine:
             self._log("脚本已暂停")
 
     def resume(self):
-        """恢复脚本"""
-        if self._context and self.state == ScriptState.PAUSED:
-            self._context.pause_flag.set()
+        """恢复脚本（手动暂停、单步停下或停在断点上都可恢复）"""
+        if self._context and self.state in (ScriptState.PAUSED, ScriptState.BREAKPOINT):
+            self._context.continue_execution()   # 同时退出单步模式
             self._set_state(ScriptState.RUNNING)
             self._log("脚本已恢复")
 
     def step_over(self):
         """单步执行"""
-        if self._context:
+        if self._context and self.state in (
+            ScriptState.RUNNING, ScriptState.PAUSED, ScriptState.BREAKPOINT
+        ):
             self._context.step()
             self._set_state(ScriptState.RUNNING)
 
@@ -406,24 +485,36 @@ log_success("AT 测试完成")
 ''',
 
     "Modbus 轮询": '''# Modbus 轮询脚本
-log_info("开始 Modbus 轮询")
+from src.core.protocol_parser import ModbusFunction, ModbusRTU
 
-from src.core.protocol_parser import ModbusRTU
+SLAVE = 1
+START_ADDR = 0
+N_REGS = 10
+EXC_LEN = 5  # 异常响应恒为 5 字节
+# 正常响应长度 = 5 + 2N，用公式算出来，不要写死字面量
+expected = ModbusRTU.expected_response_length(ModbusFunction.READ_HOLDING_REGISTERS.value, N_REGS)
+
+log_info(f"开始 Modbus 轮询: 从机 {SLAVE}, {N_REGS} 个保持寄存器, 期望 {expected} 字节")
 
 for i in range(5):
-    # 发送读请求
-    frame = ModbusRTU.build_read_holding_registers(1, 0, 10)
+    # 丢弃上一轮的残帧，避免它的尾部污染这一轮的帧头
+    clear_response()
+
+    frame = ModbusRTU.build_read_holding_registers(SLAVE, START_ADDR, N_REGS)
     send_bytes(frame)
-    log_info(f"发送轮询请求 #{i+1}")
 
-    # 等待响应
-    resp = wait_response(timeout=1.0, expected_length=23)
-    if resp:
-        log_success(f"收到响应: {len(resp)} 字节")
+    # 等待响应：长度写足，超时压短，异常/失联设备不会白等
+    resp = wait_response(timeout=0.3, expected_length=expected)
+
+    if len(resp) == EXC_LEN and resp[1] & 0x80:
+        log_error(f"轮询 #{i+1} 从机返回异常码 {resp[2]} (在线但拒绝)")
+    elif len(resp) == expected and resp[0] == SLAVE:
+        regs = ModbusRTU.registers_to_values(resp[3:-2])
+        log_success(f"轮询 #{i+1} 正常: {regs}")
     else:
-        log_error("响应超时")
+        log_error(f"轮询 #{i+1} 响应不完整 ({len(resp)}/{expected}), 从机可能失联")
 
-    sleep(0.5)
+    sleep(0.2)
 
 log_success("Modbus 轮询完成")
 ''',

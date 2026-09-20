@@ -33,6 +33,7 @@ def test_sample_round_trip():
     ok, consumed = p.detect_frame(frame)
     assert ok and consumed == len(frame)
     parsed = p.parse(frame)
+    assert parsed is not None
     assert parsed.is_valid, parsed.error_msg
     assert parsed.fields["cmd"] == 0x11
     assert parsed.fields["seq"] == 0x22
@@ -52,6 +53,7 @@ def test_corrupt_crc_invalid():
     frame = bytearray(p.build_frame(cmd=1, seq=2, payload="AABB"))
     frame[8] ^= 0xFF  # 破坏 CRC 字段
     parsed = p.parse(bytes(frame))
+    assert parsed is not None
     assert not parsed.is_valid
 
 
@@ -59,6 +61,7 @@ def test_length_field_parse_regression():
     # 回归：含 length_field 的模板曾因 TemplateField 缺 type 而解析失败
     p = TemplateProtocolParser(create_sample_template())
     parsed = p.parse(p.build_frame(cmd=5, seq=6, payload="1122"))
+    assert parsed is not None
     assert parsed.is_valid, parsed.error_msg
     assert "length" in parsed.fields
 
