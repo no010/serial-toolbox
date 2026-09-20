@@ -103,11 +103,16 @@ class ChannelSpecDialog(QDialog):
         self.offset_label = QLabel()
         self.form.addRow(self.offset_label, self.offset_spin)
 
+        self.axis_combo = QComboBox()
+        self.axis_label = QLabel()
+        self.form.addRow(self.axis_label, self.axis_combo)
+
         self.retranslate_ui()
 
         if spec:
             self.source_combo.setCurrentIndex(INDEX_BY_SOURCE[spec.source])
             self.dtype_combo.setCurrentIndex(INDEX_BY_DTYPE[spec.dtype])
+            self.axis_combo.setCurrentIndex(1 if spec.axis == "right" else 0)
         self._on_source_changed(self.source_combo.currentIndex())
         if spec:
             self.key_combo.setCurrentText(spec.key)
@@ -131,6 +136,8 @@ class ChannelSpecDialog(QDialog):
         self.unit_label.setText(tr("label_ch_unit"))
         self.scale_label.setText(tr("label_ch_scale"))
         self.offset_label.setText(tr("label_ch_offset"))
+        self.axis_label.setText(tr("label_ch_axis"))
+        _retranslate_combo(self.axis_combo, [tr("axis_left"), tr("axis_right")])
 
     def _on_source_changed(self, index: int):
         """不同来源只有各自的取数参数有意义"""
@@ -183,6 +190,7 @@ class ChannelSpecDialog(QDialog):
             unit=self.unit_edit.text().strip(),
             scale=self.scale_spin.value(),
             offset=self.offset_spin.value(),
+            axis="right" if self.axis_combo.currentIndex() == 1 else "left",
         )
 
 
@@ -216,6 +224,7 @@ class EnhancedChart(QWidget):
         self._dirty = False
         self._seen_fields: set[str] = set()
         self._seen_registers: set[str] = set()
+        self._right_curve_names: set[str] = set()
 
         self.init_ui()
         self.retranslate_ui()
@@ -342,6 +351,21 @@ class EnhancedChart(QWidget):
         self.plot_widget.setBackground("#1e1e1e")
         self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
         self.plot_widget.addLegend()
+
+        # 右轴：独立 ViewBox 与左轴 X 联动，量级差大的通道各占一条 Y 轴
+        plot_item = self.plot_widget.plotItem
+        scene = self.plot_widget.scene()
+        left_vb = plot_item.vb if plot_item is not None else None
+        assert plot_item is not None and scene is not None and left_vb is not None
+        self.plot_item: pg.PlotItem = plot_item
+        self.left_viewbox: pg.ViewBox = left_vb
+
+        self.right_viewbox = pg.ViewBox()
+        scene.addItem(self.right_viewbox)
+        self.right_axis = self.plot_widget.getAxis("right")
+        self.right_axis.linkToView(self.right_viewbox)
+        self.right_viewbox.setXLink(self.left_viewbox)
+        self.right_axis.setVisible(False)
         layout.addWidget(self.plot_widget)
 
         self.curves: dict[str, pg.PlotDataItem] = {}
@@ -360,6 +384,18 @@ class EnhancedChart(QWidget):
         self.cursor_b.setPos(1)
 
         self._rebuild_channel_bar()
+        self._update_right_axis_geometry()
+
+    def resizeEvent(self, a0):
+        super().resizeEvent(a0)
+        self._update_right_axis_geometry()
+
+    def _update_right_axis_geometry(self):
+        """右轴 ViewBox 的几何要跟随左轴的绘图区"""
+        if not hasattr(self, "right_viewbox"):
+            return
+        self.right_viewbox.setGeometry(self.left_viewbox.sceneBoundingRect())
+        self.right_viewbox.linkedViewChanged(self.left_viewbox, self.right_viewbox.XAxis)
 
     # ─── 通道管理 ───────────────────────────────────────────
 
@@ -438,18 +474,45 @@ class EnhancedChart(QWidget):
                 QMessageBox.warning(self, self.i18n.tr("label_channel").rstrip(":"), error)
 
     def _sync_curves(self):
-        """让曲线集合与通道集合保持一致"""
+        """让曲线集合与通道集合保持一致；右轴通道挂到独立 ViewBox"""
         alive = {c.name for c in self.store.channels}
         for name in [n for n in self.curves if n not in alive]:
-            self.plot_widget.removeItem(self.curves.pop(name))
+            curve = self.curves.pop(name)
+            self.plot_widget.removeItem(curve)
+            self.right_viewbox.removeItem(curve)
+            if self.plot_item.legend is not None:
+                self.plot_item.legend.removeItem(curve)
+            self._right_curve_names.discard(name)
+
         for channel in self.store.channels:
+            want_right = channel.spec.axis == "right"
             curve = self.curves.get(channel.name)
             if curve is None:
-                curve = self.plot_widget.plot(
+                curve = pg.PlotDataItem(
                     pen=pg.mkPen(channel.color, width=2), connect="finite", name=channel.name
                 )
                 self.curves[channel.name] = curve
+                self._place_curve(curve, channel.name, want_right)
+            elif (channel.name in self._right_curve_names) != want_right:
+                # 编辑通道换了轴，把曲线挪到对应的 ViewBox
+                self.plot_widget.removeItem(curve)
+                self.right_viewbox.removeItem(curve)
+                self._place_curve(curve, channel.name, want_right)
             curve.setVisible(channel.visible and not self.xy_mode)
+
+        has_right = any(c.spec.axis == "right" for c in self.store.channels)
+        self.right_axis.setVisible(has_right)
+        self.right_viewbox.setVisible(has_right)
+
+    def _place_curve(self, curve: pg.PlotDataItem, name: str, right: bool):
+        if right:
+            self.right_viewbox.addItem(curve)
+            self._right_curve_names.add(name)
+        else:
+            self.left_viewbox.addItem(curve)
+            if self.plot_item.legend is not None:
+                self.plot_item.legend.addItem(curve, name)
+            self._right_curve_names.discard(name)
 
     def _rebuild_channel_bar(self):
         # 索引 0 是常驻的"通道:"标签，其余控件全部重建
@@ -579,6 +642,7 @@ class EnhancedChart(QWidget):
         if self.autoscale_check.isChecked():
             self.plot_widget.enableAutoRange(axis="x")
             self.plot_widget.enableAutoRange(axis="y")
+            self.right_viewbox.enableAutoRange(axis="y")
         self._on_cursor_moved()  # 数据在长，读数也要跟着刷新
 
     def _update_xy(self):
@@ -661,6 +725,7 @@ class EnhancedChart(QWidget):
         enabled = state == Qt.CheckState.Checked.value
         self.plot_widget.enableAutoRange(axis="x", enabled=enabled)
         self.plot_widget.enableAutoRange(axis="y", enabled=enabled)
+        self.right_viewbox.enableAutoRange(axis="y", enable=enabled)
         self._mark_dirty()
 
     def _on_frozen(self, checked: bool):

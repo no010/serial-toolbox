@@ -41,6 +41,11 @@ class ChannelSpec:
     unit: str = ""
     scale: float = 1.0
     offset: float = 0.0
+    axis: str = "left"  # left | right，右轴通道画在独立 ViewBox 上
+
+    def __post_init__(self):
+        if self.axis not in ("left", "right"):
+            self.axis = "left"
 
     def to_dict(self) -> dict:
         return {
@@ -51,6 +56,7 @@ class ChannelSpec:
             "unit": self.unit,
             "scale": self.scale,
             "offset": self.offset,
+            "axis": self.axis,
         }
 
     @classmethod
@@ -63,6 +69,7 @@ class ChannelSpec:
             unit=data.get("unit", ""),
             scale=float(data.get("scale", 1.0)),
             offset=float(data.get("offset", 0.0)),
+            axis=data.get("axis", "left"),
         )
 
 

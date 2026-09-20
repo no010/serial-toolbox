@@ -303,3 +303,54 @@ def test_channel_dialog_spec_reflects_source(qapp):
     assert [dialog.key_combo.itemText(i) for i in range(dialog.key_combo.count())] == ["0", "3"]
     assert dialog.key_combo.currentText() == "0"  # 候选重建后落在首项
     assert dialog.dtype_combo.isHidden() or not dialog.dtype_combo.isVisibleTo(dialog)
+
+
+def test_right_axis_channels_live_in_own_viewbox(qapp):
+    """回归：所有通道共用一个 Y 轴，量级差大时小幅曲线被压平"""
+    chart = EnhancedChart(max_points=16)
+    chart.refresh_timer.stop()
+    assert chart.add_channel(ChannelSpec(name="big")) is None
+    assert chart.add_channel(ChannelSpec(name="small", axis="right")) is None
+
+    big_curve = chart.curves["big"]
+    small_curve = chart.curves["small"]
+    assert big_curve in chart.left_viewbox.addedItems
+    assert small_curve in chart.right_viewbox.addedItems
+    assert chart.right_axis.isVisible()
+
+    # 删掉唯一的右轴通道后右轴隐藏
+    chart.remove_channel("small")
+    assert not chart.right_axis.isVisible()
+    assert small_curve not in chart.right_viewbox.addedItems
+
+
+def test_channel_axis_survives_edit_and_config_round_trip(qapp):
+    chart = EnhancedChart(max_points=16)
+    chart.refresh_timer.stop()
+    chart.add_channel(ChannelSpec(name="t", source=ChartSource.FIELD, key="temp", axis="right"))
+    specs = chart.channel_specs()
+    assert specs[0]["axis"] == "right"
+
+    # 编辑通道改轴：曲线在两个 ViewBox 之间迁移，且不重复
+    channel = chart.store.channel("t")
+    assert channel is not None
+    chart.store.remove_channel("t")
+    chart.store.add_channel(
+        ChannelSpec(name="t", source=ChartSource.FIELD, key="temp", axis="left"),
+        color=channel.color,
+    )
+    chart._sync_curves()
+    curve = chart.curves["t"]
+    assert curve in chart.left_viewbox.addedItems
+    assert curve not in chart.right_viewbox.addedItems
+    assert not chart.right_axis.isVisible()
+
+
+def test_channel_dialog_axis_round_trip(qapp):
+    spec = ChannelSpec(name="t", axis="right")
+    dialog = ChannelSpecDialog(spec=spec)
+    assert dialog.axis_combo.currentIndex() == 1
+    assert dialog.spec().axis == "right"
+
+    dialog.axis_combo.setCurrentIndex(0)
+    assert dialog.spec().axis == "left"

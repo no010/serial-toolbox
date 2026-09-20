@@ -230,3 +230,18 @@ def test_store_clear_resets_samples():
 
     store.clear()
     assert ch.count() == 0
+
+
+def test_channel_spec_axis_defaults_to_left_and_normalizes():
+    assert ChannelSpec(name="a").axis == "left"
+    assert ChannelSpec(name="a", axis="bogus").axis == "left"  # 非法值归左轴
+    assert ChannelSpec(name="a", axis="right").axis == "right"
+
+
+def test_channel_spec_axis_round_trip():
+    spec = ChannelSpec(name="t", axis="right")
+    restored = ChannelSpec.from_dict(spec.to_dict())
+    assert restored.axis == "right"
+    # 旧配置没有 axis 字段时按左轴读
+    legacy = {"name": "t", "source": "raw", "key": "", "dtype": "uint8"}
+    assert ChannelSpec.from_dict(legacy).axis == "left"
