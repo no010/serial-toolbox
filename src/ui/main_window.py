@@ -50,6 +50,7 @@ from src.ui.extended_panels import (
     ScriptEditorPanel,
 )
 from src.ui.multi_port_dialog import MultiPortManagerDialog
+from src.ui.theme_manager import ThemeManager, ThemeMode
 
 # ─── 预设指令编辑对话框 ─────────────────────────────────────
 
@@ -254,6 +255,13 @@ class SerialToolboxMainWindow(QMainWindow):
         self.config_mgr = ConfigManager()
         self.app_config = self.config_mgr.load()
 
+        # 主题（亮/暗），选择持久化在配置里
+        self.theme_mgr = ThemeManager()
+        try:
+            self.theme_mgr.set_mode(ThemeMode(self.app_config.theme))
+        except ValueError:
+            self.theme_mgr.set_mode(ThemeMode.DARK)
+
         # 串口管理器
         self.serial_manager = SerialManager()
 
@@ -344,8 +352,8 @@ class SerialToolboxMainWindow(QMainWindow):
         # 状态栏
         self.create_status_bar()
 
-        # 设置样式
-        self.apply_styles()
+        # 应用主题（调色板 + QSS 成套）
+        self._apply_theme()
 
     def create_menu_bar(self):
         """创建菜单栏"""
@@ -384,6 +392,18 @@ class SerialToolboxMainWindow(QMainWindow):
         save_config_action = QAction("保存配置", self)
         save_config_action.triggered.connect(self.save_config)
         settings_menu.addAction(save_config_action)
+
+        theme_menu = settings_menu.addMenu("主题(&T)")
+        assert theme_menu is not None
+        self._theme_actions: dict[ThemeMode, QAction] = {}
+        for mode in (ThemeMode.DARK, ThemeMode.LIGHT):
+            label = "暗色" if mode is ThemeMode.DARK else "亮色"
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(self.theme_mgr.get_current_mode() == mode)
+            action.triggered.connect(lambda checked, m=mode: self._select_theme(m))
+            theme_menu.addAction(action)
+            self._theme_actions[mode] = action
 
         multi_port_action = QAction("多串口管理器...")
         multi_port_action.triggered.connect(self._show_multi_port_manager)
@@ -1224,83 +1244,19 @@ class SerialToolboxMainWindow(QMainWindow):
         if a0 is not None:
             a0.accept()
 
-    def apply_styles(self):
-        """应用样式"""
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #f5f5f5;
-            }
-            QGroupBox {
-                font-weight: bold;
-                border: 1px solid #cccccc;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                border: none;
-                padding: 5px 15px;
-                border-radius: 3px;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
-            QPushButton:pressed {
-                background-color: #3d8b40;
-            }
-            QPushButton:checked {
-                background-color: #f44336;
-            }
-            QPushButton:checked:hover {
-                background-color: #da190b;
-            }
-            QTextEdit, QPlainTextEdit {
-                background-color: #1e1e1e;
-                color: #d4d4d4;
-                border: 1px solid #cccccc;
-            }
-            QLineEdit {
-                border: 1px solid #cccccc;
-                padding: 5px;
-                border-radius: 3px;
-            }
-            QComboBox {
-                border: 1px solid #cccccc;
-                padding: 3px;
-                border-radius: 3px;
-                min-width: 60px;
-            }
-            QTabWidget::pane {
-                border: 1px solid #cccccc;
-            }
-            QTabBar::tab {
-                padding: 8px 20px;
-                margin: 2px;
-            }
-            QTabBar::tab:selected {
-                background-color: #4CAF50;
-                color: white;
-                border-radius: 3px;
-            }
-            QTableWidget {
-                border: 1px solid #cccccc;
-                gridline-color: #e0e0e0;
-            }
-            QTableWidget::item:selected {
-                background-color: #C8E6C9;
-                color: black;
-            }
-            QStatusBar {
-                background-color: #e8e8e8;
-            }
-        """)
+    def _apply_theme(self):
+        """调色板与 QSS 成套应用，避免 OS 亮/暗模式从缝隙漏进来"""
+        self.setPalette(self.theme_mgr.build_palette())
+        self.setStyleSheet(self.theme_mgr.generate_stylesheet())
+
+    def _select_theme(self, mode: ThemeMode):
+        """切换主题：即时生效、更新菜单勾选并持久化"""
+        self.theme_mgr.set_mode(mode)
+        for m, action in self._theme_actions.items():
+            action.setChecked(m == mode)
+        self._apply_theme()
+        self.app_config.theme = mode.value
+        self.config_mgr.save(self.app_config)
 
 
 def main():

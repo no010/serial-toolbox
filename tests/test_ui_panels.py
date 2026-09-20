@@ -244,6 +244,62 @@ def test_serial_read_thread_callback_is_marshalled(qapp, monkeypatch):
     assert threads == ["MainThread"], f"回调未编组到主线程: {threads}"
 
 
+def test_theme_menu_switches_palette_and_stylesheet(qapp, monkeypatch, tmp_path):
+    """回归：ThemeManager 曾是死代码，主窗口硬编码浅色 QSS，深色系统下标签白字白底"""
+    from PyQt6.QtGui import QPalette
+
+    from src.ui.main_window import SerialToolboxMainWindow
+    from src.ui.theme_manager import ThemeMode
+
+    w = SerialToolboxMainWindow()
+    monkeypatch.setattr(w.config_mgr, "CONFIG_FILE", str(tmp_path / "cfg.json"))
+    dark = w.theme_mgr.themes[ThemeMode.DARK]
+    light = w.theme_mgr.themes[ThemeMode.LIGHT]
+
+    def window_color():
+        return w.palette().color(QPalette.ColorRole.Window).name().lower()
+
+    def text_color():
+        return w.palette().color(QPalette.ColorRole.WindowText).name().lower()
+
+    w._select_theme(ThemeMode.DARK)
+    assert window_color() == dark.background
+    assert dark.text_primary in w.styleSheet()  # QSS 与调色板成套
+    assert text_color() != window_color(), "文字与背景同色会不可见"
+
+    w._select_theme(ThemeMode.LIGHT)
+    assert window_color() == light.background
+    assert light.text_primary in w.styleSheet()
+    assert text_color() != window_color()
+
+    checked = [m for m, a in w._theme_actions.items() if a.isChecked()]
+    assert checked == [ThemeMode.LIGHT]
+
+
+def test_theme_choice_is_persisted(qapp, monkeypatch, tmp_path):
+    import json
+
+    from src.ui.main_window import SerialToolboxMainWindow
+    from src.ui.theme_manager import ThemeMode
+
+    w = SerialToolboxMainWindow()
+    monkeypatch.setattr(w.config_mgr, "CONFIG_FILE", str(tmp_path / "cfg.json"))
+
+    w._select_theme(ThemeMode.LIGHT)
+    saved = json.load(open(tmp_path / "cfg.json", encoding="utf-8"))
+    assert saved["theme"] == "light"
+
+    w._select_theme(ThemeMode.DARK)
+    saved = json.load(open(tmp_path / "cfg.json", encoding="utf-8"))
+    assert saved["theme"] == "dark"
+
+
+def test_default_theme_is_dark(qapp):
+    from src.core.config_manager import AppConfig
+
+    assert AppConfig().theme == "dark"
+
+
 def test_protocol_table_shows_every_field(qapp):
     """回归：一帧多字段时表格只显示第一个字段，其余值用户看不到"""
     from src.ui.main_window import SerialToolboxMainWindow

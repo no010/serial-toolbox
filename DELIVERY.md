@@ -15,7 +15,7 @@
 - 协议解析：Modbus RTU + CAN / I²C / SPI / LIN / DMX512 / UART 包，以及**自定义 JSON 模板协议**
 - 数据曲线图：通道可绑定原始字节流 / 协议字段 / Modbus 寄存器，支持时间轴、XY 李萨如、冻结、光标测量、CSV 导出
 - Python 脚本引擎（`send` / `wait_response` / 断点）
-- 多串口对比、数据导出、日志轮转、主题切换、国际化（中/英）
+- 多串口对比、数据导出、日志轮转、主题切换（亮/暗，持久化）
 
 ---
 
@@ -27,7 +27,7 @@
 | 项目管理 | `pyproject.toml` + `uv.lock`（锁定依赖，可复现） |
 | 可执行文件 | `dist/serial-toolbox.exe`（Windows x64，PyInstaller onefile，约 52 MB） |
 | 打包配方 | `serial-toolbox.spec`（PyInstaller 构建脚本） |
-| 测试套件 | `tests/`（111 用例，pytest） |
+| 测试套件 | `tests/`（114 用例，pytest） |
 | CI 流水线 | `.github/workflows/ci.yml`（ruff + ty 类型检查 + pytest + Windows 打包冒烟） |
 | 文档 | `README.md`、本文件 |
 
@@ -69,7 +69,7 @@ uv run pyinstaller serial-toolbox.spec --noconfirm --clean
 
 | 项 | 状态 |
 |----|------|
-| 自动化测试 | `uv run pytest` → **111 passed**（协议解析器往返 / 导出 / 配置 / 日志 / 脚本引擎长度与残帧与缩进块与暂停单步 / 图表通道模型与视图 / UI 面板与线程编组 / pyserial 传输端到端） |
+| 自动化测试 | `uv run pytest` → **114 passed**（协议解析器往返 / 导出 / 配置 / 日志 / 脚本引擎长度与残帧与缩进块与暂停单步 / 图表通道模型与视图 / UI 面板与线程编组 / pyserial 传输端到端） |
 | 静态检查 | `uv run ruff check src/ tests/` → **All checks passed** |
 | 代码格式 | `uv run ruff format --check .` → **已统一**（ruff 默认风格；CI 与 pre-commit 均已锁定） |
 | 类型检查 | `uv run ty check src/ tests/` → **All checks passed**（51 处诊断已全部修复；门禁范围含 tests/）；交叉验证 `pyright src/ tests/` → **0 error** |
@@ -103,6 +103,8 @@ uv run ruff format .             # 就地格式化（CI 里跑的是 --check，�
    真机数据进来后两条曲线出点且数值与表格一致；X 轴切「时间 (s)」后横轴变成秒；
    点「⏸ 冻结」画面不再刷新但「▶ 继续」后能看到期间累积的新点；取消「采集」后曲线停止增长；
    「导出 CSV」行数与通道采样数一致，拖动两条竖线能看到 ΔX / ΔY 读数；重启程序后通道与轴设置还在。
+9. **主题**：设置 → 主题 → 暗色/亮色即时切换，标签、菜单、分组标题在两种系统配色（OS 亮/暗）
+   下都清晰可读（不再白字白底）；重启后保持上次选择。
 
 ---
 
@@ -111,7 +113,7 @@ uv run ruff format .             # 就地格式化（CI 里跑的是 --check，�
 非阻断，属进一步完善项：
 
 - **代码签名**：exe 未签名，Windows SmartScreen 可能提示；正式发布建议代码签名。
-- **测试覆盖**：已覆盖核心解析器往返、导出、配置、日志、脚本引擎、图表通道与 UI 构造（111 用例），
+- **测试覆盖**：已覆盖核心解析器往返、导出、配置、日志、脚本引擎、图表通道与 UI 构造（114 用例），
   含 pyserial socket 传输的真实收发端到端测试；可进一步补充各模块边界/异常路径与 UI 交互测试。
 - **断点粒度**：脚本按顶层语句切分执行（缩进块必须整体交给 `exec`），块内断点是在整块开始
   执行前停下，做不到逐行停下；需要更细粒度得改用 `sys.settrace`。
@@ -119,6 +121,8 @@ uv run ruff format .             # 就地格式化（CI 里跑的是 --check，�
   点击行号槽打/撤断点的交互。
 - **图表单 Y 轴**：所有通道共用一条 Y 轴，量级差大的通道（如 0-255 字节值与浮点温度）混画时
   小幅度曲线会被压平；要缓解需给通道加左右轴归属（`ChannelSpec` 目前没有该字段）。通道上限 8 条。
+- **i18n 未接线**：`src/ui/i18n.py`（中/英）与主题同属 v5.0 提交宣传但未接线的历史欠账——
+  至今没有任何模块 import 它，菜单与面板文案均为硬编码中文；README 的"国际化（中/英）"暂不成立。
 - **跨平台打包**：当前仅构建 Windows exe；macOS/Linux 需在对应平台分别打包。
 
 ---
