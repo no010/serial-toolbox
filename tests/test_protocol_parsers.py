@@ -1,4 +1,5 @@
 """内置协议解析器测试：build → detect → parse 往返 + 噪声容错。"""
+
 from src.protocols.can_parser import CANParser
 from src.protocols.dmx512_parser import DMX512Parser
 from src.protocols.i2c_parser import I2CParser
@@ -20,6 +21,7 @@ def _round_trip(parser, frame: bytes):
 
 # ── CAN ─────────────────────────────────────────────────────
 
+
 def test_can_standard_round_trip():
     p = CANParser()
     parsed = _round_trip(p, p.build_frame(can_id=0x123, data=b"\x01\x02\x03"))
@@ -29,11 +31,12 @@ def test_can_standard_round_trip():
 
 def test_can_extended_round_trip():
     p = CANParser()
-    parsed = _round_trip(p, p.build_frame(can_id=0x1FFFFFFF, data=b"\xAA\xBB", extended=True))
+    parsed = _round_trip(p, p.build_frame(can_id=0x1FFFFFFF, data=b"\xaa\xbb", extended=True))
     assert parsed.fields["is_extended"] is True
 
 
 # ── I2C ─────────────────────────────────────────────────────
+
 
 def test_i2c_round_trip():
     p = I2CParser()
@@ -50,12 +53,14 @@ def test_i2c_read_round_trip():
 
 # ── SPI ─────────────────────────────────────────────────────
 
+
 def test_spi_round_trip():
     p = SPIParser()
-    _round_trip(p, p.build_frame(cs_pin=1, data=b"\xDE\xAD"))
+    _round_trip(p, p.build_frame(cs_pin=1, data=b"\xde\xad"))
 
 
 # ── LIN ─────────────────────────────────────────────────────
+
 
 def test_lin_round_trip():
     p = LINParser()
@@ -65,13 +70,15 @@ def test_lin_round_trip():
 
 # ── DMX512 ──────────────────────────────────────────────────
 
+
 def test_dmx512_round_trip():
     p = DMX512Parser()
-    parsed = _round_trip(p, p.build_frame(universe=1, data=b"\x00\xFF\x80"))
+    parsed = _round_trip(p, p.build_frame(universe=1, data=b"\x00\xff\x80"))
     assert parsed.fields["universe"] == 1
 
 
 # ── UART Packet ─────────────────────────────────────────────
+
 
 def test_uart_packet_round_trip():
     p = UARTPacketParser()

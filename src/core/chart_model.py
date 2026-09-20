@@ -16,13 +16,15 @@ import numpy as np
 
 class ChartSource(Enum):
     """通道数据来源"""
-    RAW = "raw"          # 原始接收字节流
-    FIELD = "field"      # 协议帧解析出的命名字段
+
+    RAW = "raw"  # 原始接收字节流
+    FIELD = "field"  # 协议帧解析出的命名字段
     REGISTER = "register"  # Modbus 寄存器值
 
 
 class RawDtype(Enum):
     """原始字节的解码方式"""
+
     UINT8 = "uint8"
     INT16_BE = "int16_be"
     FLOAT32_BE = "float32_be"
@@ -31,35 +33,36 @@ class RawDtype(Enum):
 @dataclass
 class ChannelSpec:
     """一条通道的定义（可 JSON 序列化，供配置持久化）"""
+
     name: str
     source: ChartSource = ChartSource.RAW
-    key: str = ""              # FIELD: 字段名；REGISTER: 寄存器地址字符串；RAW: 忽略
-    dtype: RawDtype = RawDtype.UINT8   # 仅 RAW 使用
+    key: str = ""  # FIELD: 字段名；REGISTER: 寄存器地址字符串；RAW: 忽略
+    dtype: RawDtype = RawDtype.UINT8  # 仅 RAW 使用
     unit: str = ""
     scale: float = 1.0
     offset: float = 0.0
 
     def to_dict(self) -> dict:
         return {
-            'name': self.name,
-            'source': self.source.value,
-            'key': self.key,
-            'dtype': self.dtype.value,
-            'unit': self.unit,
-            'scale': self.scale,
-            'offset': self.offset,
+            "name": self.name,
+            "source": self.source.value,
+            "key": self.key,
+            "dtype": self.dtype.value,
+            "unit": self.unit,
+            "scale": self.scale,
+            "offset": self.offset,
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> "ChannelSpec":
         return cls(
-            name=data['name'],
-            source=ChartSource(data.get('source', ChartSource.RAW.value)),
-            key=data.get('key', ''),
-            dtype=RawDtype(data.get('dtype', RawDtype.UINT8.value)),
-            unit=data.get('unit', ''),
-            scale=float(data.get('scale', 1.0)),
-            offset=float(data.get('offset', 0.0)),
+            name=data["name"],
+            source=ChartSource(data.get("source", ChartSource.RAW.value)),
+            key=data.get("key", ""),
+            dtype=RawDtype(data.get("dtype", RawDtype.UINT8.value)),
+            unit=data.get("unit", ""),
+            scale=float(data.get("scale", 1.0)),
+            offset=float(data.get("offset", 0.0)),
         )
 
 
@@ -70,10 +73,10 @@ def decode_raw_bytes(data: bytes, dtype: RawDtype) -> list[float]:
 
     if dtype == RawDtype.INT16_BE:
         count = len(data) // 2
-        return [float(struct.unpack('>h', data[i * 2:i * 2 + 2])[0]) for i in range(count)]
+        return [float(struct.unpack(">h", data[i * 2 : i * 2 + 2])[0]) for i in range(count)]
 
     count = len(data) // 4
-    return [float(struct.unpack('>f', data[i * 4:i * 4 + 4])[0]) for i in range(count)]
+    return [float(struct.unpack(">f", data[i * 4 : i * 4 + 4])[0]) for i in range(count)]
 
 
 def to_float(value) -> float | None:
@@ -93,14 +96,15 @@ def to_float(value) -> float | None:
 @dataclass
 class ChartChannel:
     """一条通道的定义 + 环形缓冲样本"""
+
     spec: ChannelSpec
     max_points: int
-    color: str = '#4FC3F7'
+    color: str = "#4FC3F7"
     visible: bool = True
     values: np.ndarray = field(default_factory=lambda: np.zeros(0), repr=False)
     times: np.ndarray = field(default_factory=lambda: np.zeros(0), repr=False)
     ptr: int = 0
-    skipped: int = 0   # 非数值/取不到而跳过的采样数
+    skipped: int = 0  # 非数值/取不到而跳过的采样数
 
     def __post_init__(self):
         self._allocate(self.max_points)
@@ -155,7 +159,7 @@ class ChartSeriesStore:
         for channel in self.channels:
             channel._allocate(max_points)
 
-    def add_channel(self, spec: ChannelSpec, color: str = '#4FC3F7') -> ChartChannel:
+    def add_channel(self, spec: ChannelSpec, color: str = "#4FC3F7") -> ChartChannel:
         if any(c.spec.name == spec.name for c in self.channels):
             raise ValueError(f"通道名重复: {spec.name}")
         channel = ChartChannel(spec=spec, max_points=self.max_points, color=color)
@@ -217,7 +221,7 @@ class ChartSeriesStore:
         wanted = {c.spec.key for c in channels}
         values: dict[str, float] = {}
         for response in responses:
-            for reg in getattr(response, 'registers', []):
+            for reg in getattr(response, "registers", []):
                 key = str(reg.address)
                 if key not in wanted:
                     continue
@@ -235,15 +239,17 @@ class ChartSeriesStore:
         for channel in self.channels:
             times, values = channel.snapshot()
             for i, (t, value) in enumerate(zip(times, values, strict=True)):
-                rows.append({
-                    'channel': channel.spec.name,
-                    'unit': channel.spec.unit,
-                    'index': i,
-                    't': round(t, 6),
-                    'value': value,
-                })
+                rows.append(
+                    {
+                        "channel": channel.spec.name,
+                        "unit": channel.spec.unit,
+                        "index": i,
+                        "t": round(t, 6),
+                        "value": value,
+                    }
+                )
         return rows
 
     @staticmethod
     def headers() -> list[str]:
-        return ['channel', 'unit', 'index', 't', 'value']
+        return ["channel", "unit", "index", "t", "value"]

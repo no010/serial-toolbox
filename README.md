@@ -57,11 +57,14 @@ uv run serial-toolbox
 ## 开发与构建
 
 ```bash
+# 代码格式化（pre-commit / CI 跑的是 --check，不写文件）
+uv run ruff format .
+
 # 代码检查
-uv run ruff check src/
+uv run ruff check src/ tests/
 
 # 类型检查（ty，Astral 出品的 Rust 类型检查器）
-uv run ty check src/
+uv run ty check src/ tests/
 
 # 运行测试
 uv run pytest
@@ -69,7 +72,7 @@ uv run pytest
 # 构建发布包（wheel / sdist）
 uv build
 
-# 安装 pre-commit 钩子（提交前自动跑 ruff + ty）
+# 安装 pre-commit 钩子（提交前自动跑 ruff format + ruff + ty）
 pip install pre-commit && pre-commit install
 ```
 

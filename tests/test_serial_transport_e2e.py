@@ -4,6 +4,7 @@
 配合 SerialManager._read_loop 的轮询，帧会以非整帧的碎片到达 wait_response，
 正是"USB 转串分片 + 期望长度写错"引发残帧串台的现实条件。
 """
+
 import socket
 import struct
 import threading
@@ -15,15 +16,15 @@ from src.core.protocol_parser import CRC16
 from src.core.script_engine import EXAMPLE_SCRIPTS, ScriptEngine
 from src.core.serial_manager import SerialManager
 
-TAIL_DELAY = 0.03           # 尾片延迟：模拟波特率造成的分片间隔
+TAIL_DELAY = 0.03  # 尾片延迟：模拟波特率造成的分片间隔
 QUANTITY = 10
 
 
 def _frame(slave_addr: int, quantity: int, value: int = 0x1234) -> bytes:
     """功能码 0x03 的正常响应：5 + 2N 字节"""
     body = bytes([slave_addr, 0x03, quantity * 2])
-    body += struct.pack(f'>{quantity}H', *([value] * quantity))
-    return body + struct.pack('<H', CRC16.calculate(body))
+    body += struct.pack(f">{quantity}H", *([value] * quantity))
+    return body + struct.pack("<H", CRC16.calculate(body))
 
 
 class _RtuSlaveServer:
@@ -32,7 +33,7 @@ class _RtuSlaveServer:
     def __init__(self):
         self._listener = socket.socket()
         self._listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._listener.bind(('127.0.0.1', 0))
+        self._listener.bind(("127.0.0.1", 0))
         self._listener.listen(1)
         self.port = self._listener.getsockname()[1]
         self._stop = threading.Event()
@@ -57,16 +58,16 @@ class _RtuSlaveServer:
                 if not chunk:
                     return
                 buf.extend(chunk)
-                while len(buf) >= 8:                    # 读请求固定 8 字节
+                while len(buf) >= 8:  # 读请求固定 8 字节
                     request, buf = bytes(buf[:8]), buf[8:]
                     self._reply(conn, request)
 
     def _reply(self, conn: socket.socket, request: bytes):
-        quantity = struct.unpack('>H', request[4:6])[0]
+        quantity = struct.unpack(">H", request[4:6])[0]
         response = _frame(request[0], quantity)
-        conn.sendall(response[:len(response) - 2])      # 先吐前 23 字节
+        conn.sendall(response[: len(response) - 2])  # 先吐前 23 字节
         if not self._stop.wait(TAIL_DELAY):
-            conn.sendall(response[len(response) - 2:])  # 尾片留到下一轮之前才到
+            conn.sendall(response[len(response) - 2 :])  # 尾片留到下一轮之前才到
 
     def close(self):
         self._stop.set()
@@ -80,7 +81,7 @@ def rtu_link():
     server = _RtuSlaveServer()
     manager = SerialManager()
     # connect() 只认物理串口名，这里直接注入 pyserial 的 socket 传输后起跑读线程
-    manager.serial = serial.serial_for_url(f'socket://127.0.0.1:{server.port}', timeout=0.05)
+    manager.serial = serial.serial_for_url(f"socket://127.0.0.1:{server.port}", timeout=0.05)
     manager.is_connected = True
     manager.stop_event.clear()
     manager.read_thread = threading.Thread(target=manager._read_loop, daemon=True)
@@ -118,7 +119,7 @@ def test_builtin_polling_example_over_real_transport(rtu_link):
 
 def test_wait_response_reassembles_frames_over_transport(rtu_link):
     """SerialManager 读线程 + wait_response：每轮拿到的都应是完整且 CRC 有效的帧。"""
-    script = f'''from src.core.protocol_parser import CRC16, ModbusRTU
+    script = f"""from src.core.protocol_parser import CRC16, ModbusRTU
 
 expected = ModbusRTU.expected_response_length(0x03, {QUANTITY})
 for i in range(3):
@@ -126,7 +127,7 @@ for i in range(3):
     send_bytes(ModbusRTU.build_read_holding_registers(1, 0, {QUANTITY}))
     resp = wait_response(timeout=0.5, expected_length=expected)
     log_info(f"len={{len(resp)}} crc={{CRC16.check(resp)}} regs={{ModbusRTU.registers_to_values(resp[3:-2])}}")
-'''
+"""
     result, logs = _run(script, rtu_link)
 
     assert result.get("ok") is True, f"脚本失败: {result} {logs}"

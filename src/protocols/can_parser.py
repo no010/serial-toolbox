@@ -64,41 +64,29 @@ class CANParser(ProtocolParserBase):
         """解析 CAN 帧"""
         if len(data) < 4:
             return ParsedFrame(
-                protocol=self.name,
-                raw_data=data,
-                is_valid=False,
-                error_msg="帧太短"
+                protocol=self.name, raw_data=data, is_valid=False, error_msg="帧太短"
             )
 
         # 检查帧头帧尾
         if data[0] != self.FRAME_HEADER:
             return ParsedFrame(
-                protocol=self.name,
-                raw_data=data,
-                is_valid=False,
-                error_msg="帧头错误"
+                protocol=self.name, raw_data=data, is_valid=False, error_msg="帧头错误"
             )
 
         if data[-1] != self.FRAME_TAIL:
             return ParsedFrame(
-                protocol=self.name,
-                raw_data=data,
-                is_valid=False,
-                error_msg="帧尾错误"
+                protocol=self.name, raw_data=data, is_valid=False, error_msg="帧尾错误"
             )
 
         id_len = data[1]
         if id_len not in [4, 8]:
             return ParsedFrame(
-                protocol=self.name,
-                raw_data=data,
-                is_valid=False,
-                error_msg=f"ID长度无效: {id_len}"
+                protocol=self.name, raw_data=data, is_valid=False, error_msg=f"ID长度无效: {id_len}"
             )
 
         # 解析 ID
-        id_bytes = data[2:2+id_len]
-        can_id = int.from_bytes(id_bytes, 'big')
+        id_bytes = data[2 : 2 + id_len]
+        can_id = int.from_bytes(id_bytes, "big")
 
         # 判断标准帧/扩展帧
         is_extended = id_len == 8
@@ -112,20 +100,20 @@ class CANParser(ProtocolParserBase):
         dlc = data[dlc_offset]
 
         data_offset = dlc_offset + 1
-        payload = data[data_offset:data_offset+dlc]
+        payload = data[data_offset : data_offset + dlc]
 
         return ParsedFrame(
             protocol=self.name,
             raw_data=data,
             fields={
-                'id': f"0x{can_id:03X}" if not is_extended else f"0x{can_id:08X}",
-                'id_decimal': can_id,
-                'is_extended': is_extended,
-                'dlc': dlc,
-                'data': ' '.join(f'{b:02X}' for b in payload),
-                'data_bytes': list(payload),
+                "id": f"0x{can_id:03X}" if not is_extended else f"0x{can_id:08X}",
+                "id_decimal": can_id,
+                "is_extended": is_extended,
+                "dlc": dlc,
+                "data": " ".join(f"{b:02X}" for b in payload),
+                "data_bytes": list(payload),
             },
-            is_valid=True
+            is_valid=True,
         )
 
     def build_frame(self, can_id: int, data: bytes, extended: bool = False) -> bytes:  # type: ignore
@@ -138,10 +126,10 @@ class CANParser(ProtocolParserBase):
 
         if extended:
             frame.append(8)  # ID 长度
-            frame.extend(can_id.to_bytes(8, 'big'))
+            frame.extend(can_id.to_bytes(8, "big"))
         else:
             frame.append(4)  # ID 长度
-            frame.extend(can_id.to_bytes(4, 'big'))
+            frame.extend(can_id.to_bytes(4, "big"))
 
         frame.append(len(data))
         frame.extend(data)
@@ -152,10 +140,10 @@ class CANParser(ProtocolParserBase):
     def get_fields_description(self) -> dict:
         """获取字段说明"""
         return {
-            'id': 'CAN ID (十六进制)',
-            'id_decimal': 'CAN ID (十进制)',
-            'is_extended': '是否扩展帧 (29位ID)',
-            'dlc': '数据长度 (0-8)',
-            'data': '数据内容 (十六进制)',
-            'data_bytes': '数据内容 (字节列表)',
+            "id": "CAN ID (十六进制)",
+            "id_decimal": "CAN ID (十进制)",
+            "is_extended": "是否扩展帧 (29位ID)",
+            "dlc": "数据长度 (0-8)",
+            "data": "数据内容 (十六进制)",
+            "data_bytes": "数据内容 (字节列表)",
         }

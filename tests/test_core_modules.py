@@ -1,4 +1,5 @@
 """数据导出 / 配置管理 / 日志配置 测试。"""
+
 import json
 import logging
 
@@ -8,10 +9,11 @@ from src.core.logging_config import setup_logging
 
 # ── DataExporter ────────────────────────────────────────────
 
+
 def _sample_exporter() -> DataExporter:
     ex = DataExporter()
     ex.add_record("10:00:00", "RX", "Modbus", b"\x01\x03", {"reg": 1}, True)
-    ex.add_record("10:00:01", "TX", "CAN", b"\xAA\x55", {"id": 1}, False, "CRC 错误")
+    ex.add_record("10:00:01", "TX", "CAN", b"\xaa\x55", {"id": 1}, False, "CRC 错误")
     return ex
 
 
@@ -54,6 +56,7 @@ def test_exporter_empty_returns_false(tmp_path):
 
 
 # ── ConfigManager ───────────────────────────────────────────
+
 
 def test_config_save_load_round_trip(tmp_path, monkeypatch):
     cm = ConfigManager()
@@ -108,6 +111,7 @@ def test_legacy_chart_enabled_key_is_ignored(tmp_path, monkeypatch):
 
 
 # ── logging_config ──────────────────────────────────────────
+
 
 def test_setup_logging_idempotent():
     setup_logging()

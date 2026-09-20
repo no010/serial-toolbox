@@ -8,6 +8,7 @@ from enum import Enum
 
 class Language(Enum):
     """语言"""
+
     CHINESE = "zh"
     ENGLISH = "en"
 
@@ -17,7 +18,6 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
     Language.CHINESE: {
         # 主窗口
         "app_title": "串口调试助手 - Serial Toolbox v4.0",
-
         # 菜单
         "menu_file": "文件(&F)",
         "menu_export": "导出日志(&E)",
@@ -35,7 +35,6 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "menu_lang_en": "English",
         "menu_help": "帮助(&H)",
         "menu_about": "关于(&A)",
-
         # 串口配置
         "group_serial_config": "串口配置",
         "label_port": "串口:",
@@ -46,11 +45,9 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "label_parity": "校验:",
         "btn_connect": "连接",
         "btn_disconnect": "断开",
-
         # 信号线控制
         "group_signal_control": "信号线控制",
         "label_input_status": "输入状态:",
-
         # 接收区
         "tab_text": "📝 文本",
         "tab_chart": "📈 波形",
@@ -60,7 +57,6 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "check_timestamp": "显示时间戳",
         "check_auto_scroll": "自动滚动",
         "btn_clear": "清空",
-
         # 发送区
         "group_send": "数据发送",
         "check_hex_send": "HEX 发送",
@@ -70,7 +66,6 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "label_history": "发送历史:",
         "placeholder_send": "输入要发送的数据...",
         "btn_send": "发送",
-
         # 预设指令
         "group_presets": "预设指令",
         "col_name": "名称",
@@ -80,7 +75,6 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "btn_edit": "✏️ 编辑",
         "btn_delete": "🗑️ 删除",
         "btn_send_selected": "📤 发送选中",
-
         # Modbus 快捷操作
         "group_modbus": "Modbus RTU 快捷操作",
         "label_slave_addr": "从机地址:",
@@ -91,7 +85,6 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "btn_read": "📖 读取",
         "btn_write": "✏️ 写入",
         "btn_crc": "🔢 CRC 计算",
-
         # Modbus 响应解析
         "group_modbus_response": "Modbus 响应解析",
         "label_auto_detect": "自动检测 Modbus 帧并解析寄存器值",
@@ -105,11 +98,9 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "col_address": "地址",
         "col_dec": "DEC (有符号)",
         "col_float": "Float (IEEE754)",
-
         # 协议解析
         "label_select_protocol": "选择协议:",
         "auto_detect": "自动检测",
-
         # 脚本引擎
         "tab_script": "🐍 脚本引擎",
         "group_script": "Python 脚本引擎",
@@ -126,13 +117,11 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "status_paused": "已暂停",
         "status_stopped": "已停止",
         "status_error": "错误",
-
         # 多串口对比
         "tab_compare": "🔀 多串口对比",
         "group_compare": "多串口对比 (最多4路)",
         "label_select_ports": "选择要对比的串口:",
         "btn_clear_all": "清空全部",
-
         # 波形图
         "label_mode": "模式:",
         "mode_yt": "YT (时域)",
@@ -145,12 +134,10 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "btn_clear_chart": "清空",
         "label_channel": "通道:",
         "check_grid": "网格",
-
         # 状态栏
         "status_disconnected": "未连接",
         "status_connected": "已连接: {}",
         "status_log_off": "日志: 关闭",
-
         # 对话框
         "dialog_preset_edit": "编辑预设指令",
         "label_name": "名称:",
@@ -158,7 +145,6 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "placeholder_name": "指令名称",
         "placeholder_data": "指令内容 (ASCII 或 HEX)",
         "check_hex_format": "HEX 格式",
-
         "dialog_log_settings": "日志设置",
         "check_enable_log": "启用自动日志记录",
         "label_log_dir": "日志目录:",
@@ -171,7 +157,6 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "label_max_size": "最大文件大小:",
         "label_rotate_interval": "轮转间隔:",
         "label_max_files": "最多保留文件:",
-
         "dialog_multi_port": "多串口管理器",
         "title_multi_port": "🔀 多串口管理器 (最多4路)",
         "btn_configure": "⚙️ 配置",
@@ -179,11 +164,9 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "btn_connect_all": "🔗 全部连接",
         "btn_disconnect_all": "⛓️‍💥 全部断开",
         "btn_close": "关闭",
-
         "dialog_port_config": "配置 {}",
         "title_port_config": "🔌 {} 串口配置",
         "label_flow_control": "流控:",
-
         # 消息
         "msg_no_port": "没有可用的串口",
         "msg_connect_failed": "串口连接失败",
@@ -194,9 +177,8 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "msg_export_success": "日志已导出到:\n{}",
         "msg_config_saved": "配置已保存",
         "msg_connected_count": "已连接 {} 个串口",
-        "msg_not_configured": "{} 未配置，请先点击\"配置\"按钮",
+        "msg_not_configured": '{} 未配置，请先点击"配置"按钮',
         "msg_config_saved_detail": "{} 配置已保存\n端口: {}\n波特率: {}",
-
         # 关于
         "about_title": "关于",
         "about_text": """串口调试助手 v4.0
@@ -221,11 +203,9 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
 
 基于 PyQt6 + pyqtgraph 开发""",
     },
-
     Language.ENGLISH: {
         # Main Window
         "app_title": "Serial Toolbox v4.0",
-
         # Menu
         "menu_file": "File(&F)",
         "menu_export": "Export Log(&E)",
@@ -243,7 +223,6 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "menu_lang_en": "English",
         "menu_help": "Help(&H)",
         "menu_about": "About(&A)",
-
         # Serial Config
         "group_serial_config": "Serial Configuration",
         "label_port": "Port:",
@@ -254,11 +233,9 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "label_parity": "Parity:",
         "btn_connect": "Connect",
         "btn_disconnect": "Disconnect",
-
         # Signal Control
         "group_signal_control": "Signal Control",
         "label_input_status": "Input Status:",
-
         # Receive Area
         "tab_text": "📝 Text",
         "tab_chart": "📈 Chart",
@@ -268,7 +245,6 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "check_timestamp": "Timestamp",
         "check_auto_scroll": "Auto Scroll",
         "btn_clear": "Clear",
-
         # Send Area
         "group_send": "Data Send",
         "check_hex_send": "HEX Send",
@@ -278,7 +254,6 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "label_history": "History:",
         "placeholder_send": "Enter data to send...",
         "btn_send": "Send",
-
         # Presets
         "group_presets": "Presets",
         "col_name": "Name",
@@ -288,7 +263,6 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "btn_edit": "✏️ Edit",
         "btn_delete": "🗑️ Delete",
         "btn_send_selected": "📤 Send Selected",
-
         # Modbus Panel
         "group_modbus": "Modbus RTU Quick Actions",
         "label_slave_addr": "Slave Addr:",
@@ -299,7 +273,6 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "btn_read": "📖 Read",
         "btn_write": "✏️ Write",
         "btn_crc": "🔢 CRC Calc",
-
         # Modbus Response
         "group_modbus_response": "Modbus Response Parser",
         "label_auto_detect": "Auto-detect Modbus frames and parse register values",
@@ -313,11 +286,9 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "col_address": "Address",
         "col_dec": "DEC (Signed)",
         "col_float": "Float (IEEE754)",
-
         # Protocol
         "label_select_protocol": "Protocol:",
         "auto_detect": "Auto Detect",
-
         # Script Engine
         "tab_script": "🐍 Script",
         "group_script": "Python Script Engine",
@@ -334,13 +305,11 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "status_paused": "Paused",
         "status_stopped": "Stopped",
         "status_error": "Error",
-
         # Multi-port Compare
         "tab_compare": "🔀 Compare",
         "group_compare": "Multi-Port Compare (Max 4)",
         "label_select_ports": "Select ports to compare:",
         "btn_clear_all": "Clear All",
-
         # Chart
         "label_mode": "Mode:",
         "mode_yt": "YT (Time Domain)",
@@ -353,12 +322,10 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "btn_clear_chart": "Clear",
         "label_channel": "Channel:",
         "check_grid": "Grid",
-
         # Status Bar
         "status_disconnected": "Disconnected",
         "status_connected": "Connected: {}",
         "status_log_off": "Log: Off",
-
         # Dialogs
         "dialog_preset_edit": "Edit Preset",
         "label_name": "Name:",
@@ -366,7 +333,6 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "placeholder_name": "Preset name",
         "placeholder_data": "Data content (ASCII or HEX)",
         "check_hex_format": "HEX Format",
-
         "dialog_log_settings": "Log Settings",
         "check_enable_log": "Enable Auto Logging",
         "label_log_dir": "Log Directory:",
@@ -379,7 +345,6 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "label_max_size": "Max File Size:",
         "label_rotate_interval": "Rotate Interval:",
         "label_max_files": "Max Files:",
-
         "dialog_multi_port": "Multi-Port Manager",
         "title_multi_port": "🔀 Multi-Port Manager (Max 4)",
         "btn_configure": "⚙️ Config",
@@ -387,11 +352,9 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "btn_connect_all": "🔗 Connect All",
         "btn_disconnect_all": "⛓️‍💥 Disconnect All",
         "btn_close": "Close",
-
         "dialog_port_config": "Configure {}",
         "title_port_config": "🔌 {} Serial Config",
         "label_flow_control": "Flow Control:",
-
         # Messages
         "msg_no_port": "No available serial ports",
         "msg_connect_failed": "Serial connection failed",
@@ -404,7 +367,6 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "msg_connected_count": "Connected {} ports",
         "msg_not_configured": "{} not configured, please click 'Config' first",
         "msg_config_saved_detail": "{} config saved\nPort: {}\nBaudrate: {}",
-
         # About
         "about_title": "About",
         "about_text": """Serial Toolbox v4.0

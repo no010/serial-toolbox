@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ExportData:
     """导出数据项"""
+
     timestamp: str
     direction: str  # 'RX' or 'TX'
     protocol: str
@@ -32,27 +33,34 @@ class DataExporter:
         self.data_buffer: list[ExportData] = []
         self.max_buffer_size = 10000  # 最大缓冲条数
 
-    def add_record(self, timestamp: str, direction: str, protocol: str,
-                   raw_data: bytes, fields: dict[str, Any],
-                   is_valid: bool = True, error_msg: str = ""):
+    def add_record(
+        self,
+        timestamp: str,
+        direction: str,
+        protocol: str,
+        raw_data: bytes,
+        fields: dict[str, Any],
+        is_valid: bool = True,
+        error_msg: str = "",
+    ):
         """添加记录"""
         record = ExportData(
             timestamp=timestamp,
             direction=direction,
             protocol=protocol,
-            raw_hex=' '.join(f'{b:02X}' for b in raw_data),
+            raw_hex=" ".join(f"{b:02X}" for b in raw_data),
             fields=fields,
             is_valid=is_valid,
-            error_msg=error_msg
+            error_msg=error_msg,
         )
 
         self.data_buffer.append(record)
 
         # 限制缓冲大小
         if len(self.data_buffer) > self.max_buffer_size:
-            self.data_buffer = self.data_buffer[-self.max_buffer_size:]
+            self.data_buffer = self.data_buffer[-self.max_buffer_size :]
 
-    def add_from_parsed_frame(self, frame, direction: str = 'RX'):
+    def add_from_parsed_frame(self, frame, direction: str = "RX"):
         """从解析帧添加记录"""
         self.add_record(
             timestamp=frame.timestamp,
@@ -61,7 +69,7 @@ class DataExporter:
             raw_data=frame.raw_data,
             fields=frame.fields,
             is_valid=frame.is_valid,
-            error_msg=frame.error_msg
+            error_msg=frame.error_msg,
         )
 
     def export_csv(self, filepath: str) -> bool:
@@ -77,13 +85,13 @@ class DataExporter:
 
             field_names = sorted(all_fields)
 
-            with open(filepath, 'w', newline='', encoding='utf-8') as f:
+            with open(filepath, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
 
                 # 写入表头
-                header = ['时间戳', '方向', '协议', '原始数据(HEX)', '有效'] + field_names
+                header = ["时间戳", "方向", "协议", "原始数据(HEX)", "有效"] + field_names
                 if any(r.error_msg for r in self.data_buffer):
-                    header.append('错误信息')
+                    header.append("错误信息")
                 writer.writerow(header)
 
                 # 写入数据
@@ -93,12 +101,12 @@ class DataExporter:
                         record.direction,
                         record.protocol,
                         record.raw_hex,
-                        '是' if record.is_valid else '否'
+                        "是" if record.is_valid else "否",
                     ]
 
                     # 添加字段值
                     for field in field_names:
-                        value = record.fields.get(field, '')
+                        value = record.fields.get(field, "")
                         row.append(str(value))
 
                     # 添加错误信息
@@ -119,25 +127,25 @@ class DataExporter:
                 return False
 
             data = {
-                'export_time': datetime.now().isoformat(),
-                'record_count': len(self.data_buffer),
-                'records': []
+                "export_time": datetime.now().isoformat(),
+                "record_count": len(self.data_buffer),
+                "records": [],
             }
 
             for record in self.data_buffer:
                 record_dict = {
-                    'timestamp': record.timestamp,
-                    'direction': record.direction,
-                    'protocol': record.protocol,
-                    'raw_hex': record.raw_hex,
-                    'is_valid': record.is_valid,
-                    'fields': record.fields,
+                    "timestamp": record.timestamp,
+                    "direction": record.direction,
+                    "protocol": record.protocol,
+                    "raw_hex": record.raw_hex,
+                    "is_valid": record.is_valid,
+                    "fields": record.fields,
                 }
                 if record.error_msg:
-                    record_dict['error_msg'] = record.error_msg
-                data['records'].append(record_dict)
+                    record_dict["error_msg"] = record.error_msg
+                data["records"].append(record_dict)
 
-            with open(filepath, 'w', encoding='utf-8') as f:
+            with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
 
             return True
@@ -151,7 +159,7 @@ class DataExporter:
             if not self.data_buffer:
                 return False
 
-            with open(filepath, 'w', encoding='utf-8') as f:
+            with open(filepath, "w", encoding="utf-8") as f:
                 f.write("串口调试助手 - 数据导出\n")
                 f.write(f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write(f"记录数: {len(self.data_buffer)}\n")
@@ -186,10 +194,10 @@ class DataExporter:
     def get_stats(self) -> dict[str, Any]:
         """获取统计信息"""
         if not self.data_buffer:
-            return {'count': 0}
+            return {"count": 0}
 
         protocols = {}
-        directions = {'RX': 0, 'TX': 0}
+        directions = {"RX": 0, "TX": 0}
         valid_count = 0
 
         for record in self.data_buffer:
@@ -199,9 +207,9 @@ class DataExporter:
                 valid_count += 1
 
         return {
-            'count': len(self.data_buffer),
-            'protocols': protocols,
-            'directions': directions,
-            'valid_count': valid_count,
-            'invalid_count': len(self.data_buffer) - valid_count,
+            "count": len(self.data_buffer),
+            "protocols": protocols,
+            "directions": directions,
+            "valid_count": valid_count,
+            "invalid_count": len(self.data_buffer) - valid_count,
         }

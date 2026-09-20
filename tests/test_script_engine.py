@@ -3,6 +3,7 @@
 回归覆盖：_run_script 曾引用未定义的 script；wait_response 曾整仓倒出导致残帧污染；
 逐行 exec 曾让任何含缩进块的脚本以 unexpected indent 报错结束。
 """
+
 import struct
 import threading
 import time
@@ -23,8 +24,9 @@ class FakeSerial:
         return True
 
 
-def _run(script: str, serial: FakeSerial | None = None, *,
-         join: bool = True, timeout: float = 30) -> tuple[ScriptEngine, dict, list[str], threading.Thread]:
+def _run(
+    script: str, serial: FakeSerial | None = None, *, join: bool = True, timeout: float = 30
+) -> tuple[ScriptEngine, dict, list[str], threading.Thread]:
     """在脚本引擎线程里跑一段脚本，返回 (engine, on_finished 结果, 日志行, 脚本线程)。"""
     eng = ScriptEngine(serial or FakeSerial())
     logs: list[str] = []
@@ -52,8 +54,8 @@ def _wait_until(predicate, timeout: float = 5.0) -> bool:
 def _read_response(slave_addr: int, quantity: int, value: int = 0x1234) -> bytes:
     """组一帧功能码 0x03 的正常响应：地址 1 + 功能码 1 + 字节数 1 + 数据 2N + CRC16 2。"""
     body = bytes([slave_addr, 0x03, quantity * 2])
-    body += struct.pack(f'>{quantity}H', *([value] * quantity))
-    return body + struct.pack('<H', CRC16.calculate(body))
+    body += struct.pack(f">{quantity}H", *([value] * quantity))
+    return body + struct.pack("<H", CRC16.calculate(body))
 
 
 def test_execute_runs_without_nameerror():
@@ -79,9 +81,9 @@ def test_execute_empty_script_is_ok():
 
 # ─── wait_response 长度语义（残帧污染回归）────────────────────
 
+
 def _context():
-    return ScriptContext(serial_manager=FakeSerial(), log=lambda m: None,
-                         sleep=lambda s: None)
+    return ScriptContext(serial_manager=FakeSerial(), log=lambda m: None, sleep=lambda s: None)
 
 
 def test_wait_response_returns_exact_length_and_keeps_remainder():
@@ -107,7 +109,7 @@ def test_residual_tail_survives_until_next_round():
     assert ctx.wait_response(timeout=1.0, expected_length=23) == frame_a[:23]
     assert bytes(ctx.response_buffer) == frame_a[23:]
 
-    ctx.clear_response_buffer()          # 示例里每轮发送前的防御
+    ctx.clear_response_buffer()  # 示例里每轮发送前的防御
     ctx.feed_response(frame_b)
     resp = ctx.wait_response(timeout=1.0, expected_length=25)
 
@@ -118,10 +120,10 @@ def test_residual_tail_survives_until_next_round():
 def test_wait_response_keeps_extra_bytes_for_next_round():
     """超过期望长度的字节留给下一次等待，不能被静默吞掉。"""
     ctx = _context()
-    ctx.feed_response(b'0123456789')
+    ctx.feed_response(b"0123456789")
 
-    assert ctx.wait_response(timeout=1.0, expected_length=4) == b'0123'
-    assert ctx.wait_response(timeout=1.0, expected_length=6) == b'456789'
+    assert ctx.wait_response(timeout=1.0, expected_length=4) == b"0123"
+    assert ctx.wait_response(timeout=1.0, expected_length=6) == b"456789"
 
 
 def test_wait_response_assembles_fragmented_frame():
@@ -139,30 +141,33 @@ def test_wait_response_assembles_fragmented_frame():
 
 def test_wait_response_timeout_returns_partial_data():
     ctx = _context()
-    ctx.feed_response(b'12')
+    ctx.feed_response(b"12")
 
-    assert ctx.wait_response(timeout=0.2, expected_length=10) == b'12'
+    assert ctx.wait_response(timeout=0.2, expected_length=10) == b"12"
 
 
 def test_clear_response_buffer_drops_stale_bytes_before_next_send():
     ctx = _context()
-    ctx.feed_response(b'\xaa\xbb')
+    ctx.feed_response(b"\xaa\xbb")
     ctx.clear_response_buffer()
 
-    assert ctx.wait_response(timeout=0.1, expected_length=2) == b''
+    assert ctx.wait_response(timeout=0.1, expected_length=2) == b""
 
 
 # ─── 响应长度真值来源 ────────────────────────────────────────
 
+
 def test_expected_response_length_matches_real_frames():
     for quantity in (1, 8, 10, 125):
-        assert ModbusRTU.expected_response_length(0x03, quantity) == len(_read_response(1, quantity))
+        assert ModbusRTU.expected_response_length(0x03, quantity) == len(
+            _read_response(1, quantity)
+        )
         assert ModbusRTU.expected_response_length(0x04, quantity) == 5 + 2 * quantity
 
 
 def test_expected_response_length_for_bit_and_write_functions():
-    assert ModbusRTU.expected_response_length(0x01, 16) == 7      # 16 位 = 2 字节数据
-    assert ModbusRTU.expected_response_length(0x02, 9) == 7       # 9 位按字节向上取整
+    assert ModbusRTU.expected_response_length(0x01, 16) == 7  # 16 位 = 2 字节数据
+    assert ModbusRTU.expected_response_length(0x02, 9) == 7  # 9 位按字节向上取整
     for write_fc in (0x05, 0x06, 0x0F, 0x10):
         assert ModbusRTU.expected_response_length(write_fc) == 8  # 写响应固定回显 8 字节
 
@@ -173,6 +178,7 @@ def test_expected_response_length_rejects_unknown_function_code():
 
 
 # ─── 内置示例端到端回归 ──────────────────────────────────────
+
 
 class _FragmentingSlaveSerial(FakeSerial):
     """从机模拟器：应答分两片写回，尾片延迟到达，复现串口分片边界。"""
@@ -210,6 +216,7 @@ def test_builtin_examples_finish_cleanly(name):
 
 
 # ─── 顶层语句切分（缩进块执行回归）───────────────────────────
+
 
 def test_for_loop_body_executes_once_and_script_finishes_ok():
     """回归：逐行 exec 回退收集块后，外层循环会重复处理块内缩进行，脚本以 unexpected indent 收尾。"""
@@ -249,8 +256,9 @@ def test_runtime_error_reports_absolute_script_line():
 
 def test_breakpoint_inside_block_hits_and_resumes():
     """回归：断点命中后状态未切换，resume() 只认 PAUSED 而拒绝唤醒，脚本永久卡在块前。"""
-    eng, result, logs, thread = _run('set_breakpoint(3)\nfor i in range(2):\n    log_info("tick")',
-                                     join=False)
+    eng, result, logs, thread = _run(
+        'set_breakpoint(3)\nfor i in range(2):\n    log_info("tick")', join=False
+    )
 
     assert _wait_until(lambda: eng.state == ScriptState.BREAKPOINT), f"块内断点未命中: {logs}"
 
@@ -300,7 +308,7 @@ def test_pause_holds_script_at_statement_boundary():
     assert _wait_until(lambda: any("s1" in line for line in logs))
 
     eng.pause()
-    time.sleep(0.5)                       # 足以跨过 s2 前的 sleep(0.2)
+    time.sleep(0.5)  # 足以跨过 s2 前的 sleep(0.2)
     assert not any("s2" in line for line in logs), f"pause() 未生效: {logs}"
     assert eng.state == ScriptState.PAUSED
 

@@ -16,7 +16,7 @@ class SPIParser(ProtocolParserBase):
     # [帧头 0x53 ('S')] [CS引脚] [模式 CPOL/CPHA] [长度] [数据...] [帧尾 0x45 ('E')]
 
     FRAME_HEADER = 0x53  # 'S'
-    FRAME_TAIL = 0x45    # 'E'
+    FRAME_TAIL = 0x45  # 'E'
 
     def detect_frame(self, data: bytes) -> tuple[bool, int]:
         """检测 SPI 帧"""
@@ -53,27 +53,18 @@ class SPIParser(ProtocolParserBase):
         """解析 SPI 帧"""
         if len(data) < 5:
             return ParsedFrame(
-                protocol=self.name,
-                raw_data=data,
-                is_valid=False,
-                error_msg="帧太短"
+                protocol=self.name, raw_data=data, is_valid=False, error_msg="帧太短"
             )
 
         # 检查帧头帧尾
         if data[0] != self.FRAME_HEADER:
             return ParsedFrame(
-                protocol=self.name,
-                raw_data=data,
-                is_valid=False,
-                error_msg="帧头错误"
+                protocol=self.name, raw_data=data, is_valid=False, error_msg="帧头错误"
             )
 
         if data[-1] != self.FRAME_TAIL:
             return ParsedFrame(
-                protocol=self.name,
-                raw_data=data,
-                is_valid=False,
-                error_msg="帧尾错误"
+                protocol=self.name, raw_data=data, is_valid=False, error_msg="帧尾错误"
             )
 
         # 解析字段
@@ -87,21 +78,21 @@ class SPIParser(ProtocolParserBase):
 
         # 解析数据
         data_offset = 4
-        payload = data[data_offset:data_offset+length]
+        payload = data[data_offset : data_offset + length]
 
         return ParsedFrame(
             protocol=self.name,
             raw_data=data,
             fields={
-                'cs_pin': f"CS{cs_pin}",
-                'mode': f"Mode {mode} (CPOL={cpol}, CPHA={cpha})",
-                'cpol': cpol,
-                'cpha': cpha,
-                'length': length,
-                'data': ' '.join(f'{b:02X}' for b in payload),
-                'data_bytes': list(payload),
+                "cs_pin": f"CS{cs_pin}",
+                "mode": f"Mode {mode} (CPOL={cpol}, CPHA={cpha})",
+                "cpol": cpol,
+                "cpha": cpha,
+                "length": length,
+                "data": " ".join(f"{b:02X}" for b in payload),
+                "data_bytes": list(payload),
             },
-            is_valid=True
+            is_valid=True,
         )
 
     def build_frame(self, cs_pin: int, data: bytes, mode: int = 0) -> bytes:  # type: ignore
@@ -112,7 +103,7 @@ class SPIParser(ProtocolParserBase):
         frame = bytearray()
         frame.append(self.FRAME_HEADER)
         frame.append(cs_pin & 0x0F)  # CS0-CS15
-        frame.append(mode & 0x03)    # Mode 0-3
+        frame.append(mode & 0x03)  # Mode 0-3
         frame.append(len(data))
         frame.extend(data)
         frame.append(self.FRAME_TAIL)
@@ -122,11 +113,11 @@ class SPIParser(ProtocolParserBase):
     def get_fields_description(self) -> dict:
         """获取字段说明"""
         return {
-            'cs_pin': '片选引脚 (CS0-CS15)',
-            'mode': 'SPI 模式 (Mode 0-3)',
-            'cpol': '时钟极性 (0=低电平空闲, 1=高电平空闲)',
-            'cpha': '时钟相位 (0=第一边沿采样, 1=第二边沿采样)',
-            'length': '数据长度',
-            'data': '数据内容 (十六进制)',
-            'data_bytes': '数据内容 (字节列表)',
+            "cs_pin": "片选引脚 (CS0-CS15)",
+            "mode": "SPI 模式 (Mode 0-3)",
+            "cpol": "时钟极性 (0=低电平空闲, 1=高电平空闲)",
+            "cpha": "时钟相位 (0=第一边沿采样, 1=第二边沿采样)",
+            "length": "数据长度",
+            "data": "数据内容 (十六进制)",
+            "data_bytes": "数据内容 (字节列表)",
         }

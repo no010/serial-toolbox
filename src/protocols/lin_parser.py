@@ -16,7 +16,7 @@ class LINParser(ProtocolParserBase):
     # [帧头 0x4C ('L')] [ID] [长度] [数据...] [校验和] [帧尾 0x4E ('N')]
 
     FRAME_HEADER = 0x4C  # 'L'
-    FRAME_TAIL = 0x4E    # 'N'
+    FRAME_TAIL = 0x4E  # 'N'
 
     # LIN ID 类型
     ID_TYPES = {
@@ -62,27 +62,18 @@ class LINParser(ProtocolParserBase):
         """解析 LIN 帧"""
         if len(data) < 5:
             return ParsedFrame(
-                protocol=self.name,
-                raw_data=data,
-                is_valid=False,
-                error_msg="帧太短"
+                protocol=self.name, raw_data=data, is_valid=False, error_msg="帧太短"
             )
 
         # 检查帧头帧尾
         if data[0] != self.FRAME_HEADER:
             return ParsedFrame(
-                protocol=self.name,
-                raw_data=data,
-                is_valid=False,
-                error_msg="帧头错误"
+                protocol=self.name, raw_data=data, is_valid=False, error_msg="帧头错误"
             )
 
         if data[-1] != self.FRAME_TAIL:
             return ParsedFrame(
-                protocol=self.name,
-                raw_data=data,
-                is_valid=False,
-                error_msg="帧尾错误"
+                protocol=self.name, raw_data=data, is_valid=False, error_msg="帧尾错误"
             )
 
         # 解析字段
@@ -91,14 +82,14 @@ class LINParser(ProtocolParserBase):
 
         # 解析数据
         data_offset = 3
-        payload = data[data_offset:data_offset+length]
+        payload = data[data_offset : data_offset + length]
 
         # 校验和
         checksum = data[data_offset + length]
 
         # 计算校验和 (增强校验)
         calculated_checksum = self._calculate_checksum(lin_id, payload)
-        checksum_valid = (checksum == calculated_checksum)
+        checksum_valid = checksum == calculated_checksum
 
         # ID 类型
         id_type = self.ID_TYPES.get(lin_id, f"用户自定义 (0x{lin_id:02X})")
@@ -107,15 +98,15 @@ class LINParser(ProtocolParserBase):
             protocol=self.name,
             raw_data=data,
             fields={
-                'id': f"0x{lin_id:02X}",
-                'id_type': id_type,
-                'length': length,
-                'data': ' '.join(f'{b:02X}' for b in payload),
-                'data_bytes': list(payload),
-                'checksum': f"0x{checksum:02X}",
-                'checksum_valid': checksum_valid,
+                "id": f"0x{lin_id:02X}",
+                "id_type": id_type,
+                "length": length,
+                "data": " ".join(f"{b:02X}" for b in payload),
+                "data_bytes": list(payload),
+                "checksum": f"0x{checksum:02X}",
+                "checksum_valid": checksum_valid,
             },
-            is_valid=checksum_valid
+            is_valid=checksum_valid,
         )
 
     def build_frame(self, lin_id: int, data: bytes) -> bytes:  # type: ignore
@@ -150,11 +141,11 @@ class LINParser(ProtocolParserBase):
     def get_fields_description(self) -> dict:
         """获取字段说明"""
         return {
-            'id': 'LIN ID (6位, 0x00-0x3F)',
-            'id_type': 'ID 类型 (诊断/用户自定义)',
-            'length': '数据长度 (1-8)',
-            'data': '数据内容 (十六进制)',
-            'data_bytes': '数据内容 (字节列表)',
-            'checksum': '校验和',
-            'checksum_valid': '校验和是否有效',
+            "id": "LIN ID (6位, 0x00-0x3F)",
+            "id_type": "ID 类型 (诊断/用户自定义)",
+            "length": "数据长度 (1-8)",
+            "data": "数据内容 (十六进制)",
+            "data_bytes": "数据内容 (字节列表)",
+            "checksum": "校验和",
+            "checksum_valid": "校验和是否有效",
         }

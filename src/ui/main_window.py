@@ -53,6 +53,7 @@ from src.ui.multi_port_dialog import MultiPortManagerDialog
 
 # ─── 预设指令编辑对话框 ─────────────────────────────────────
 
+
 class PresetEditDialog(QDialog):
     """预设指令编辑对话框"""
 
@@ -69,7 +70,7 @@ class PresetEditDialog(QDialog):
 
         self.data_edit = QLineEdit(data)
         self.data_edit.setPlaceholderText("指令内容 (ASCII 或 HEX)")
-        self.data_edit.setFont(QFont('Consolas', 10))
+        self.data_edit.setFont(QFont("Consolas", 10))
         layout.addRow("数据:", self.data_edit)
 
         self.hex_check = QCheckBox("HEX 格式")
@@ -84,14 +85,11 @@ class PresetEditDialog(QDialog):
         layout.addRow(buttons)
 
     def get_values(self):
-        return (
-            self.name_edit.text(),
-            self.data_edit.text(),
-            self.hex_check.isChecked()
-        )
+        return (self.name_edit.text(), self.data_edit.text(), self.hex_check.isChecked())
 
 
 # ─── Modbus 快捷操作面板 ─────────────────────────────────────
+
 
 class ModbusPanel(QGroupBox):
     """Modbus RTU 快捷操作面板"""
@@ -99,7 +97,7 @@ class ModbusPanel(QGroupBox):
     send_frame = pyqtSignal(bytes)
 
     def __init__(self):
-        super().__init__('Modbus RTU 快捷操作')
+        super().__init__("Modbus RTU 快捷操作")
         self.init_ui()
 
     def init_ui(self):
@@ -107,20 +105,22 @@ class ModbusPanel(QGroupBox):
 
         # 第一行: 从机地址 + 功能码
         row1 = QHBoxLayout()
-        row1.addWidget(QLabel('从机地址:'))
+        row1.addWidget(QLabel("从机地址:"))
         self.slave_spin = QSpinBox()
         self.slave_spin.setRange(1, 247)
         self.slave_spin.setValue(1)
         row1.addWidget(self.slave_spin)
 
-        row1.addWidget(QLabel('功能码:'))
+        row1.addWidget(QLabel("功能码:"))
         self.func_combo = QComboBox()
-        self.func_combo.addItems([
-            '0x03 读保持寄存器',
-            '0x04 读输入寄存器',
-            '0x06 写单个寄存器',
-            '0x10 写多个寄存器',
-        ])
+        self.func_combo.addItems(
+            [
+                "0x03 读保持寄存器",
+                "0x04 读输入寄存器",
+                "0x06 写单个寄存器",
+                "0x10 写多个寄存器",
+            ]
+        )
         self.func_combo.currentIndexChanged.connect(self._on_func_changed)
         row1.addWidget(self.func_combo)
         row1.addStretch()
@@ -128,15 +128,15 @@ class ModbusPanel(QGroupBox):
 
         # 第二行: 寄存器地址 + 数量/值
         row2 = QHBoxLayout()
-        row2.addWidget(QLabel('起始地址:'))
+        row2.addWidget(QLabel("起始地址:"))
         self.reg_addr_spin = QSpinBox()
         self.reg_addr_spin.setRange(0, 65535)
         self.reg_addr_spin.setValue(0)
         self.reg_addr_spin.setDisplayIntegerBase(16)
-        self.reg_addr_spin.setPrefix('0x')
+        self.reg_addr_spin.setPrefix("0x")
         row2.addWidget(self.reg_addr_spin)
 
-        row2.addWidget(QLabel('数量/值:'))
+        row2.addWidget(QLabel("数量/值:"))
         self.quantity_spin = QSpinBox()
         self.quantity_spin.setRange(1, 125)
         self.quantity_spin.setValue(1)
@@ -147,10 +147,10 @@ class ModbusPanel(QGroupBox):
 
         # 写多个寄存器的值输入
         self.values_row = QHBoxLayout()
-        self.values_row.addWidget(QLabel('寄存器值 (逗号分隔):'))
+        self.values_row.addWidget(QLabel("寄存器值 (逗号分隔):"))
         self.values_edit = QLineEdit()
         self.values_edit.setPlaceholderText("例: 100, 200, 300")
-        self.values_edit.setFont(QFont('Consolas', 10))
+        self.values_edit.setFont(QFont("Consolas", 10))
         self.values_row.addWidget(self.values_edit)
         self.values_row_widget = QWidget()
         self.values_row_widget.setLayout(self.values_row)
@@ -160,16 +160,16 @@ class ModbusPanel(QGroupBox):
         # 操作按钮
         btn_row = QHBoxLayout()
 
-        self.read_btn = QPushButton('📖 读取')
+        self.read_btn = QPushButton("📖 读取")
         self.read_btn.clicked.connect(self._do_read)
         btn_row.addWidget(self.read_btn)
 
-        self.write_btn = QPushButton('✏️ 写入')
+        self.write_btn = QPushButton("✏️ 写入")
         self.write_btn.clicked.connect(self._do_write)
         btn_row.addWidget(self.write_btn)
 
         # CRC 计算按钮
-        self.crc_btn = QPushButton('🔢 CRC 计算')
+        self.crc_btn = QPushButton("🔢 CRC 计算")
         self.crc_btn.clicked.connect(self._calc_crc)
         btn_row.addWidget(self.crc_btn)
 
@@ -177,14 +177,14 @@ class ModbusPanel(QGroupBox):
         layout.addLayout(btn_row)
 
         # CRC 结果显示
-        self.crc_label = QLabel('')
-        self.crc_label.setFont(QFont('Consolas', 9))
-        self.crc_label.setStyleSheet('color: #4FC3F7;')
+        self.crc_label = QLabel("")
+        self.crc_label.setFont(QFont("Consolas", 9))
+        self.crc_label.setStyleSheet("color: #4FC3F7;")
         layout.addWidget(self.crc_label)
 
     def _on_func_changed(self, index):
         """功能码变化时切换 UI"""
-        is_write_multi = (index == 3)  # 0x10
+        is_write_multi = index == 3  # 0x10
         self.values_row_widget.setVisible(is_write_multi)
         self.quantity_spin.setVisible(not is_write_multi)
 
@@ -203,13 +203,13 @@ class ModbusPanel(QGroupBox):
         elif func_idx == 3:  # 0x10 写多个
             values_text = self.values_edit.text().strip()
             if not values_text:
-                return b''
+                return b""
             try:
-                values = [int(v.strip()) for v in values_text.split(',') if v.strip()]
+                values = [int(v.strip()) for v in values_text.split(",") if v.strip()]
                 return ModbusRTU.build_write_multiple_registers(slave, addr, values)
             except ValueError:
-                return b''
-        return b''
+                return b""
+        return b""
 
     def _do_read(self):
         """执行读取"""
@@ -228,11 +228,12 @@ class ModbusPanel(QGroupBox):
         frame = self._build_frame()
         if frame and len(frame) >= 4:
             crc = CRC16.calculate(frame[:-2])
-            hex_str = ' '.join(f'{b:02X}' for b in frame)
-            self.crc_label.setText(f'帧: {hex_str}  |  CRC: 0x{crc:04X}')
+            hex_str = " ".join(f"{b:02X}" for b in frame)
+            self.crc_label.setText(f"帧: {hex_str}  |  CRC: 0x{crc:04X}")
 
 
 # ─── 主窗口 ──────────────────────────────────────────────────
+
 
 class SerialToolboxMainWindow(QMainWindow):
     """串口调试助手主窗口 v3.0"""
@@ -286,10 +287,12 @@ class SerialToolboxMainWindow(QMainWindow):
 
     def init_ui(self):
         """初始化 UI"""
-        self.setWindowTitle('串口调试助手 - Serial Toolbox v4.0')
+        self.setWindowTitle("串口调试助手 - Serial Toolbox v4.0")
         self.setGeometry(
-            self.app_config.window_x, self.app_config.window_y,
-            self.app_config.window_w, self.app_config.window_h
+            self.app_config.window_x,
+            self.app_config.window_y,
+            self.app_config.window_w,
+            self.app_config.window_h,
         )
 
         # 创建菜单栏
@@ -330,11 +333,11 @@ class SerialToolboxMainWindow(QMainWindow):
 
         # 脚本编辑器
         self.script_panel = ScriptEditorPanel(self.serial_manager)
-        bottom_tabs.addTab(self.script_panel, '🐍 脚本引擎')
+        bottom_tabs.addTab(self.script_panel, "🐍 脚本引擎")
 
         # 多串口对比
         self.compare_panel = MultiSerialComparePanel(self.multi_manager)
-        bottom_tabs.addTab(self.compare_panel, '🔀 多串口对比')
+        bottom_tabs.addTab(self.compare_panel, "🔀 多串口对比")
 
         main_layout.addWidget(bottom_tabs)
 
@@ -350,93 +353,95 @@ class SerialToolboxMainWindow(QMainWindow):
         assert menubar is not None
 
         # 文件菜单
-        file_menu = menubar.addMenu('文件(&F)')
+        file_menu = menubar.addMenu("文件(&F)")
         assert file_menu is not None
 
-        export_action = QAction('导出日志(&E)', self)
-        export_action.setShortcut('Ctrl+E')
+        export_action = QAction("导出日志(&E)", self)
+        export_action.setShortcut("Ctrl+E")
         export_action.triggered.connect(self.export_log)
         file_menu.addAction(export_action)
 
         file_menu.addSeparator()
 
-        exit_action = QAction('退出(&X)', self)
-        exit_action.setShortcut('Ctrl+Q')
+        exit_action = QAction("退出(&X)", self)
+        exit_action.setShortcut("Ctrl+Q")
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
         # 设置菜单
-        settings_menu = menubar.addMenu('设置(&S)')
+        settings_menu = menubar.addMenu("设置(&S)")
         assert settings_menu is not None
 
-        clear_action = QAction('清空显示(&C)', self)
-        clear_action.setShortcut('Ctrl+L')
+        clear_action = QAction("清空显示(&C)", self)
+        clear_action.setShortcut("Ctrl+L")
         clear_action.triggered.connect(self.clear_display)
         settings_menu.addAction(clear_action)
 
-        log_settings_action = QAction('日志设置...')
+        log_settings_action = QAction("日志设置...")
         log_settings_action.triggered.connect(self._show_log_settings)
         settings_menu.addAction(log_settings_action)
 
-        save_config_action = QAction('保存配置', self)
+        save_config_action = QAction("保存配置", self)
         save_config_action.triggered.connect(self.save_config)
         settings_menu.addAction(save_config_action)
 
-        multi_port_action = QAction('多串口管理器...')
+        multi_port_action = QAction("多串口管理器...")
         multi_port_action.triggered.connect(self._show_multi_port_manager)
         settings_menu.addAction(multi_port_action)
 
         # 帮助菜单
-        help_menu = menubar.addMenu('帮助(&H)')
+        help_menu = menubar.addMenu("帮助(&H)")
         assert help_menu is not None
 
-        about_action = QAction('关于(&A)', self)
+        about_action = QAction("关于(&A)", self)
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
 
     def create_serial_config_group(self) -> QGroupBox:
         """创建串口配置组"""
-        group = QGroupBox('串口配置')
+        group = QGroupBox("串口配置")
         layout = QHBoxLayout()
 
         # 串口选择
-        layout.addWidget(QLabel('串口:'))
+        layout.addWidget(QLabel("串口:"))
         self.port_combo = QComboBox()
         self.port_combo.setMinimumWidth(150)
         layout.addWidget(self.port_combo)
 
         # 刷新按钮
-        self.refresh_btn = QPushButton('🔄 刷新')
+        self.refresh_btn = QPushButton("🔄 刷新")
         self.refresh_btn.clicked.connect(self.scan_ports)
         layout.addWidget(self.refresh_btn)
 
         # 波特率
-        layout.addWidget(QLabel('波特率:'))
+        layout.addWidget(QLabel("波特率:"))
         self.baudrate_combo = QComboBox()
-        self.baudrate_combo.addItems(['9600', '19200', '38400', '57600', '115200', '230400', '460800', '921600'])
-        self.baudrate_combo.setCurrentText('115200')
+        self.baudrate_combo.addItems(
+            ["9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600"]
+        )
+        self.baudrate_combo.setCurrentText("115200")
         layout.addWidget(self.baudrate_combo)
 
         # 数据位
-        layout.addWidget(QLabel('数据位:'))
+        layout.addWidget(QLabel("数据位:"))
         self.databits_combo = QComboBox()
-        self.databits_combo.addItems(['8', '7', '6', '5'])
+        self.databits_combo.addItems(["8", "7", "6", "5"])
         layout.addWidget(self.databits_combo)
 
         # 停止位
-        layout.addWidget(QLabel('停止位:'))
+        layout.addWidget(QLabel("停止位:"))
         self.stopbits_combo = QComboBox()
-        self.stopbits_combo.addItems(['1', '1.5', '2'])
+        self.stopbits_combo.addItems(["1", "1.5", "2"])
         layout.addWidget(self.stopbits_combo)
 
         # 校验位
-        layout.addWidget(QLabel('校验:'))
+        layout.addWidget(QLabel("校验:"))
         self.parity_combo = QComboBox()
-        self.parity_combo.addItems(['None', 'Even', 'Odd', 'Mark', 'Space'])
+        self.parity_combo.addItems(["None", "Even", "Odd", "Mark", "Space"])
         layout.addWidget(self.parity_combo)
 
         # 连接按钮
-        self.connect_btn = QPushButton('连接')
+        self.connect_btn = QPushButton("连接")
         self.connect_btn.setCheckable(True)
         self.connect_btn.setMinimumWidth(80)
         self.connect_btn.clicked.connect(self.toggle_connection)
@@ -448,32 +453,32 @@ class SerialToolboxMainWindow(QMainWindow):
 
     def create_signal_control_group(self) -> QGroupBox:
         """创建信号线控制组"""
-        group = QGroupBox('信号线控制')
+        group = QGroupBox("信号线控制")
         layout = QHBoxLayout()
 
         # DTR
-        self.dtr_check = QCheckBox('DTR')
+        self.dtr_check = QCheckBox("DTR")
         self.dtr_check.stateChanged.connect(self._on_dtr_changed)
         layout.addWidget(self.dtr_check)
 
         # RTS
-        self.rts_check = QCheckBox('RTS')
+        self.rts_check = QCheckBox("RTS")
         self.rts_check.stateChanged.connect(self._on_rts_changed)
         layout.addWidget(self.rts_check)
 
-        layout.addWidget(QLabel('  │  输入状态:'))
+        layout.addWidget(QLabel("  │  输入状态:"))
 
         # 输入信号指示
-        self.cts_label = QLabel('CTS: --')
-        self.cts_label.setStyleSheet('color: gray;')
+        self.cts_label = QLabel("CTS: --")
+        self.cts_label.setStyleSheet("color: gray;")
         layout.addWidget(self.cts_label)
 
-        self.dsr_label = QLabel('DSR: --')
-        self.dsr_label.setStyleSheet('color: gray;')
+        self.dsr_label = QLabel("DSR: --")
+        self.dsr_label.setStyleSheet("color: gray;")
         layout.addWidget(self.dsr_label)
 
-        self.cd_label = QLabel('CD: --')
-        self.cd_label.setStyleSheet('color: gray;')
+        self.cd_label = QLabel("CD: --")
+        self.cd_label.setStyleSheet("color: gray;")
         layout.addWidget(self.cd_label)
 
         layout.addStretch()
@@ -491,20 +496,20 @@ class SerialToolboxMainWindow(QMainWindow):
         # 控制栏
         control_layout = QHBoxLayout()
 
-        self.hex_receive_check = QCheckBox('HEX 显示')
+        self.hex_receive_check = QCheckBox("HEX 显示")
         control_layout.addWidget(self.hex_receive_check)
 
-        self.timestamp_check = QCheckBox('显示时间戳')
+        self.timestamp_check = QCheckBox("显示时间戳")
         self.timestamp_check.setChecked(True)
         control_layout.addWidget(self.timestamp_check)
 
-        self.auto_scroll_check = QCheckBox('自动滚动')
+        self.auto_scroll_check = QCheckBox("自动滚动")
         self.auto_scroll_check.setChecked(True)
         control_layout.addWidget(self.auto_scroll_check)
 
         control_layout.addStretch()
 
-        clear_btn = QPushButton('清空')
+        clear_btn = QPushButton("清空")
         clear_btn.clicked.connect(self.clear_receive)
         control_layout.addWidget(clear_btn)
 
@@ -513,41 +518,41 @@ class SerialToolboxMainWindow(QMainWindow):
         # 接收文本框
         self.receive_text = QTextEdit()
         self.receive_text.setReadOnly(True)
-        self.receive_text.setFont(QFont('Consolas', 10))
+        self.receive_text.setFont(QFont("Consolas", 10))
         text_layout.addWidget(self.receive_text)
 
-        tabs.addTab(text_widget, '📝 文本')
+        tabs.addTab(text_widget, "📝 文本")
 
         # Tab 2: 增强波形图 (数据通道 + XY)
         self.chart = EnhancedChart(max_points=self.app_config.chart_max_points, max_channels=8)
         self.chart.apply_channel_specs(self.app_config.chart_channels)
         self.chart.set_x_axis_mode(self.app_config.chart_x_axis)
         self.chart.collect_check.setChecked(self.app_config.chart_collect)
-        tabs.addTab(self.chart, '📈 波形')
+        tabs.addTab(self.chart, "📈 波形")
 
         # Tab 3: Modbus 响应解析
         self.modbus_response_panel = ModbusResponsePanel()
-        tabs.addTab(self.modbus_response_panel, '🔢 Modbus解析')
+        tabs.addTab(self.modbus_response_panel, "🔢 Modbus解析")
 
         # Tab 4: 协议插件解析
         protocol_widget = QWidget()
         protocol_layout = QVBoxLayout(protocol_widget)
 
         proto_ctrl = QHBoxLayout()
-        proto_ctrl.addWidget(QLabel('选择协议:'))
+        proto_ctrl.addWidget(QLabel("选择协议:"))
         self.protocol_combo = QComboBox()
-        self.protocol_combo.addItems(['自动检测'] + self.protocol_registry.list_protocols())
+        self.protocol_combo.addItems(["自动检测"] + self.protocol_registry.list_protocols())
         self.protocol_combo.currentTextChanged.connect(self._on_protocol_changed)
         proto_ctrl.addWidget(self.protocol_combo)
 
         proto_ctrl.addStretch()
 
         # 模板管理按钮
-        self.template_btn = QPushButton('📋 管理模板')
+        self.template_btn = QPushButton("📋 管理模板")
         self.template_btn.clicked.connect(self._show_template_dialog)
         proto_ctrl.addWidget(self.template_btn)
 
-        proto_clear_btn = QPushButton('清空')
+        proto_clear_btn = QPushButton("清空")
         proto_clear_btn.clicked.connect(self._clear_protocol_table)
         proto_ctrl.addWidget(proto_clear_btn)
 
@@ -556,47 +561,47 @@ class SerialToolboxMainWindow(QMainWindow):
         # 协议解析结果表格
         self.protocol_table = QTableWidget()
         self.protocol_table.setColumnCount(5)
-        self.protocol_table.setHorizontalHeaderLabels(['时间', '协议', '字段', '值', '原始数据'])
+        self.protocol_table.setHorizontalHeaderLabels(["时间", "协议", "字段", "值", "原始数据"])
         protocol_header = self.protocol_table.horizontalHeader()
         assert protocol_header is not None
         protocol_header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         protocol_layout.addWidget(self.protocol_table)
 
-        tabs.addTab(protocol_widget, '🔌 协议解析')
+        tabs.addTab(protocol_widget, "🔌 协议解析")
 
         return tabs
 
     def create_send_group(self) -> QGroupBox:
         """创建发送区"""
-        group = QGroupBox('数据发送')
+        group = QGroupBox("数据发送")
         layout = QVBoxLayout()
 
         # 控制栏
         control_layout = QHBoxLayout()
 
-        self.hex_send_check = QCheckBox('HEX 发送')
+        self.hex_send_check = QCheckBox("HEX 发送")
         control_layout.addWidget(self.hex_send_check)
 
-        self.newline_check = QCheckBox('发送新行')
+        self.newline_check = QCheckBox("发送新行")
         self.newline_check.setChecked(True)
         control_layout.addWidget(self.newline_check)
 
         control_layout.addStretch()
 
         # 自动发送
-        self.auto_send_check = QCheckBox('自动发送')
+        self.auto_send_check = QCheckBox("自动发送")
         self.auto_send_check.stateChanged.connect(self._on_auto_send_toggled)
         control_layout.addWidget(self.auto_send_check)
 
-        control_layout.addWidget(QLabel('间隔(ms):'))
-        self.auto_send_interval = QLineEdit('1000')
+        control_layout.addWidget(QLabel("间隔(ms):"))
+        self.auto_send_interval = QLineEdit("1000")
         self.auto_send_interval.setMaximumWidth(60)
         control_layout.addWidget(self.auto_send_interval)
 
         layout.addLayout(control_layout)
 
         # 发送历史
-        layout.addWidget(QLabel('发送历史:'))
+        layout.addWidget(QLabel("发送历史:"))
         self.history_combo = QComboBox()
         self.history_combo.setEditable(False)
         self.history_combo.activated.connect(self.load_history)
@@ -604,8 +609,8 @@ class SerialToolboxMainWindow(QMainWindow):
 
         # 发送输入框
         self.send_input = QLineEdit()
-        self.send_input.setFont(QFont('Consolas', 10))
-        self.send_input.setPlaceholderText('输入要发送的数据...')
+        self.send_input.setFont(QFont("Consolas", 10))
+        self.send_input.setPlaceholderText("输入要发送的数据...")
         self.send_input.returnPressed.connect(self.send_data)
         layout.addWidget(self.send_input)
 
@@ -613,7 +618,7 @@ class SerialToolboxMainWindow(QMainWindow):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
-        send_btn = QPushButton('发送')
+        send_btn = QPushButton("发送")
         send_btn.setMinimumWidth(80)
         send_btn.clicked.connect(self.send_data)
         btn_layout.addWidget(send_btn)
@@ -625,13 +630,13 @@ class SerialToolboxMainWindow(QMainWindow):
 
     def create_presets_group(self) -> QGroupBox:
         """创建预设指令面板"""
-        group = QGroupBox('预设指令')
+        group = QGroupBox("预设指令")
         layout = QVBoxLayout()
 
         # 预设表格
         self.presets_table = QTableWidget()
         self.presets_table.setColumnCount(3)
-        self.presets_table.setHorizontalHeaderLabels(['名称', '数据', 'HEX'])
+        self.presets_table.setHorizontalHeaderLabels(["名称", "数据", "HEX"])
         presets_header = self.presets_table.horizontalHeader()
         assert presets_header is not None
         presets_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
@@ -645,19 +650,19 @@ class SerialToolboxMainWindow(QMainWindow):
         # 操作按钮
         btn_layout = QHBoxLayout()
 
-        add_btn = QPushButton('➕ 添加')
+        add_btn = QPushButton("➕ 添加")
         add_btn.clicked.connect(self._add_preset)
         btn_layout.addWidget(add_btn)
 
-        edit_btn = QPushButton('✏️ 编辑')
+        edit_btn = QPushButton("✏️ 编辑")
         edit_btn.clicked.connect(self._edit_preset)
         btn_layout.addWidget(edit_btn)
 
-        del_btn = QPushButton('🗑️ 删除')
+        del_btn = QPushButton("🗑️ 删除")
         del_btn.clicked.connect(self._delete_preset)
         btn_layout.addWidget(del_btn)
 
-        send_preset_btn = QPushButton('📤 发送选中')
+        send_preset_btn = QPushButton("📤 发送选中")
         send_preset_btn.clicked.connect(self._send_selected_preset)
         btn_layout.addWidget(send_preset_btn)
 
@@ -676,23 +681,23 @@ class SerialToolboxMainWindow(QMainWindow):
         assert status_bar is not None
         self.status_bar = status_bar
 
-        self.connection_label = QLabel('未连接')
-        self.connection_label.setStyleSheet('color: red;')
+        self.connection_label = QLabel("未连接")
+        self.connection_label.setStyleSheet("color: red;")
         self.status_bar.addWidget(self.connection_label)
 
-        self.status_bar.addPermanentWidget(QLabel('|'))
+        self.status_bar.addPermanentWidget(QLabel("|"))
 
-        self.rx_label = QLabel('RX: 0 bytes')
+        self.rx_label = QLabel("RX: 0 bytes")
         self.status_bar.addPermanentWidget(self.rx_label)
 
-        self.status_bar.addPermanentWidget(QLabel('|'))
+        self.status_bar.addPermanentWidget(QLabel("|"))
 
-        self.tx_label = QLabel('TX: 0 bytes')
+        self.tx_label = QLabel("TX: 0 bytes")
         self.status_bar.addPermanentWidget(self.tx_label)
 
-        self.status_bar.addPermanentWidget(QLabel('|'))
+        self.status_bar.addPermanentWidget(QLabel("|"))
 
-        self.log_label = QLabel('日志: 关闭')
+        self.log_label = QLabel("日志: 关闭")
         self.status_bar.addPermanentWidget(self.log_label)
 
     def setup_connections(self):
@@ -718,7 +723,8 @@ class SerialToolboxMainWindow(QMainWindow):
 
         # 多串口管理器回调（同样来自各自的读线程）
         self.multi_manager.on_data_received = lambda name, data: self.multi_data_arrived.emit(
-            name, data)
+            name, data
+        )
         self.multi_data_arrived.connect(self._on_multi_data_received)
 
     # ─── 串口操作 ────────────────────────────────────────────
@@ -729,7 +735,7 @@ class SerialToolboxMainWindow(QMainWindow):
         ports = SerialManager.scan_ports()
         for port in ports:
             display_text = f"{port['device']} - {port['description']}"
-            self.port_combo.addItem(display_text, port['device'])
+            self.port_combo.addItem(display_text, port["device"])
 
     def toggle_connection(self):
         """切换连接状态"""
@@ -741,26 +747,22 @@ class SerialToolboxMainWindow(QMainWindow):
     def connect_serial(self):
         """连接串口"""
         if self.port_combo.count() == 0:
-            QMessageBox.warning(self, '警告', '没有可用的串口')
+            QMessageBox.warning(self, "警告", "没有可用的串口")
             return
 
         port = self.port_combo.currentData()
         baudrate = int(self.baudrate_combo.currentText())
         databits = int(self.databits_combo.currentText())
         stopbits = float(self.stopbits_combo.currentText())
-        parity_map = {'None': 'N', 'Even': 'E', 'Odd': 'O', 'Mark': 'M', 'Space': 'S'}
+        parity_map = {"None": "N", "Even": "E", "Odd": "O", "Mark": "M", "Space": "S"}
         parity = parity_map[self.parity_combo.currentText()]
 
         config = SerialConfig(
-            port=port,
-            baudrate=baudrate,
-            data_bits=databits,
-            stop_bits=stopbits,
-            parity=parity
+            port=port, baudrate=baudrate, data_bits=databits, stop_bits=stopbits, parity=parity
         )
 
         if not self.serial_manager.connect(config):
-            QMessageBox.critical(self, '错误', '串口连接失败')
+            QMessageBox.critical(self, "错误", "串口连接失败")
 
     @pyqtSlot(bytes)
     def on_serial_data_received(self, data: bytes):
@@ -785,13 +787,13 @@ class SerialToolboxMainWindow(QMainWindow):
     def display_received_data(self, data: bytes):
         """显示接收的数据"""
         if self.hex_receive_check.isChecked():
-            text = ' '.join(f'{b:02X}' for b in data)
+            text = " ".join(f"{b:02X}" for b in data)
         else:
-            text = data.decode('utf-8', errors='replace')
+            text = data.decode("utf-8", errors="replace")
 
         if self.timestamp_check.isChecked():
-            timestamp = datetime.now().strftime('[%H:%M:%S.%f]')[:-3]
-            text = f'{timestamp} {text}'
+            timestamp = datetime.now().strftime("[%H:%M:%S.%f]")[:-3]
+            text = f"{timestamp} {text}"
 
         self.receive_text.append(text)
 
@@ -801,7 +803,7 @@ class SerialToolboxMainWindow(QMainWindow):
     def send_data(self):
         """发送数据"""
         if not self.serial_manager.is_connected:
-            QMessageBox.warning(self, '警告', '串口未连接')
+            QMessageBox.warning(self, "警告", "串口未连接")
             return
 
         text = self.send_input.text()
@@ -823,24 +825,24 @@ class SerialToolboxMainWindow(QMainWindow):
             fmt = DataFormat.ASCII
 
         if self.newline_check.isChecked() and fmt == DataFormat.ASCII:
-            text += '\n'
+            text += "\n"
 
         if self.serial_manager.send_text(text, fmt):
-            self.sent_bytes += len(text.encode('utf-8'))
+            self.sent_bytes += len(text.encode("utf-8"))
 
             # 日志记录
-            self.log_writer.write_tx(text.encode('utf-8'), self.hex_send_check.isChecked())
+            self.log_writer.write_tx(text.encode("utf-8"), self.hex_send_check.isChecked())
 
     def _send_modbus_frame(self, frame: bytes):
         """发送 Modbus 帧"""
         if not self.serial_manager.is_connected:
-            QMessageBox.warning(self, '警告', '请先连接串口')
+            QMessageBox.warning(self, "警告", "请先连接串口")
             return
         if self.serial_manager.send(frame):
             self.sent_bytes += len(frame)
-            hex_str = ' '.join(f'{b:02X}' for b in frame)
-            timestamp = datetime.now().strftime('[%H:%M:%S.%f]')[:-3]
-            self.receive_text.append(f'{timestamp} [TX Modbus] {hex_str}')
+            hex_str = " ".join(f"{b:02X}" for b in frame)
+            timestamp = datetime.now().strftime("[%H:%M:%S.%f]")[:-3]
+            self.receive_text.append(f"{timestamp} [TX Modbus] {hex_str}")
 
             # 日志记录
             self.log_writer.write_tx(frame, hex_mode=True)
@@ -884,17 +886,18 @@ class SerialToolboxMainWindow(QMainWindow):
 
     def _on_signals_changed(self, signals: dict):
         """信号线状态变化回调"""
+
         def _update(label, name, value):
             if value:
-                label.setText(f'{name}: ●')
-                label.setStyleSheet('color: #4CAF50;')
+                label.setText(f"{name}: ●")
+                label.setStyleSheet("color: #4CAF50;")
             else:
-                label.setText(f'{name}: ○')
-                label.setStyleSheet('color: gray;')
+                label.setText(f"{name}: ○")
+                label.setStyleSheet("color: gray;")
 
-        _update(self.cts_label, 'CTS', signals.get('cts', False))
-        _update(self.dsr_label, 'DSR', signals.get('dsr', False))
-        _update(self.cd_label, 'CD', signals.get('cd', False))
+        _update(self.cts_label, "CTS", signals.get("cts", False))
+        _update(self.dsr_label, "DSR", signals.get("dsr", False))
+        _update(self.cd_label, "CD", signals.get("cd", False))
 
     # ─── 预设指令管理 ────────────────────────────────────────
 
@@ -903,9 +906,9 @@ class SerialToolboxMainWindow(QMainWindow):
         presets = self.app_config.presets
         self.presets_table.setRowCount(len(presets))
         for i, preset in enumerate(presets):
-            self.presets_table.setItem(i, 0, QTableWidgetItem(preset.get('name', '')))
-            self.presets_table.setItem(i, 1, QTableWidgetItem(preset.get('data', '')))
-            self.presets_table.setItem(i, 2, QTableWidgetItem('✓' if preset.get('is_hex') else ''))
+            self.presets_table.setItem(i, 0, QTableWidgetItem(preset.get("name", "")))
+            self.presets_table.setItem(i, 1, QTableWidgetItem(preset.get("data", "")))
+            self.presets_table.setItem(i, 2, QTableWidgetItem("✓" if preset.get("is_hex") else ""))
 
     def _save_presets_from_table(self):
         """从表格保存预设"""
@@ -915,11 +918,13 @@ class SerialToolboxMainWindow(QMainWindow):
             data_item = self.presets_table.item(i, 1)
             hex_item = self.presets_table.item(i, 2)
             if name_item and data_item:
-                presets.append({
-                    'name': name_item.text(),
-                    'data': data_item.text(),
-                    'is_hex': hex_item.text() == '✓' if hex_item else False,
-                })
+                presets.append(
+                    {
+                        "name": name_item.text(),
+                        "data": data_item.text(),
+                        "is_hex": hex_item.text() == "✓" if hex_item else False,
+                    }
+                )
         self.app_config.presets = presets
         self.config_mgr.save()
 
@@ -933,7 +938,7 @@ class SerialToolboxMainWindow(QMainWindow):
                 self.presets_table.insertRow(row)
                 self.presets_table.setItem(row, 0, QTableWidgetItem(name))
                 self.presets_table.setItem(row, 1, QTableWidgetItem(data))
-                self.presets_table.setItem(row, 2, QTableWidgetItem('✓' if is_hex else ''))
+                self.presets_table.setItem(row, 2, QTableWidgetItem("✓" if is_hex else ""))
                 self._save_presets_from_table()
 
     def _edit_preset(self):
@@ -946,14 +951,14 @@ class SerialToolboxMainWindow(QMainWindow):
         hex_item = self.presets_table.item(row, 2)
         name = name_item.text() if name_item else ""
         data = data_item.text() if data_item else ""
-        is_hex = (hex_item.text() == '✓') if hex_item else False
+        is_hex = (hex_item.text() == "✓") if hex_item else False
 
         dialog = PresetEditDialog(self, name, data, is_hex)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             new_name, new_data, new_is_hex = dialog.get_values()
             self.presets_table.setItem(row, 0, QTableWidgetItem(new_name))
             self.presets_table.setItem(row, 1, QTableWidgetItem(new_data))
-            self.presets_table.setItem(row, 2, QTableWidgetItem('✓' if new_is_hex else ''))
+            self.presets_table.setItem(row, 2, QTableWidgetItem("✓" if new_is_hex else ""))
             self._save_presets_from_table()
 
     def _delete_preset(self):
@@ -973,17 +978,17 @@ class SerialToolboxMainWindow(QMainWindow):
         if row < 0:
             return
         if not self.serial_manager.is_connected:
-            QMessageBox.warning(self, '警告', '串口未连接')
+            QMessageBox.warning(self, "警告", "串口未连接")
             return
 
         data_item = self.presets_table.item(row, 1)
         hex_item = self.presets_table.item(row, 2)
         data_text = data_item.text() if data_item else ""
-        is_hex = (hex_item.text() == '✓') if hex_item else False
+        is_hex = (hex_item.text() == "✓") if hex_item else False
 
         fmt = DataFormat.HEX if is_hex else DataFormat.ASCII
         if self.serial_manager.send_text(data_text, fmt):
-            self.sent_bytes += len(data_text.encode('utf-8'))
+            self.sent_bytes += len(data_text.encode("utf-8"))
 
     # ─── 日志设置 ────────────────────────────────────────────
 
@@ -996,11 +1001,11 @@ class SerialToolboxMainWindow(QMainWindow):
             self.log_writer = RotatingLogWriter(new_config)
 
             if new_config.enabled:
-                self.log_label.setText(f'日志: {new_config.log_dir}')
-                self.log_label.setStyleSheet('color: green;')
+                self.log_label.setText(f"日志: {new_config.log_dir}")
+                self.log_label.setStyleSheet("color: green;")
             else:
-                self.log_label.setText('日志: 关闭')
-                self.log_label.setStyleSheet('color: gray;')
+                self.log_label.setText("日志: 关闭")
+                self.log_label.setStyleSheet("color: gray;")
 
     # ─── 多串口回调 ──────────────────────────────────────────
 
@@ -1012,7 +1017,7 @@ class SerialToolboxMainWindow(QMainWindow):
 
     def _on_protocol_changed(self, protocol_name: str):
         """协议选择变化"""
-        if protocol_name == '自动检测':
+        if protocol_name == "自动检测":
             self.stream_parser.set_protocol(None)
         else:
             self.stream_parser.set_protocol(protocol_name)
@@ -1026,11 +1031,11 @@ class SerialToolboxMainWindow(QMainWindow):
 
     def _add_protocol_frame(self, frame):
         """添加协议帧到表格：每个字段一行"""
-        raw_hex = ' '.join(f'{b:02X}' for b in frame.raw_data[:20])
+        raw_hex = " ".join(f"{b:02X}" for b in frame.raw_data[:20])
         if len(frame.raw_data) > 20:
-            raw_hex += '...'
+            raw_hex += "..."
 
-        fields = frame.fields or {'-': '-'}
+        fields = frame.fields or {"-": "-"}
         for index, (key, value) in enumerate(fields.items()):
             row = self.protocol_table.rowCount()
             self.protocol_table.insertRow(row)
@@ -1040,7 +1045,7 @@ class SerialToolboxMainWindow(QMainWindow):
             self.protocol_table.setItem(row, 2, QTableWidgetItem(str(key)))
             self.protocol_table.setItem(row, 3, QTableWidgetItem(str(value)))
             # 同一帧的原始数据只在一行显示，避免多字段时重复刷屏
-            self.protocol_table.setItem(row, 4, QTableWidgetItem(raw_hex if index == 0 else ''))
+            self.protocol_table.setItem(row, 4, QTableWidgetItem(raw_hex if index == 0 else ""))
 
     def _clear_protocol_table(self):
         """清空协议表格"""
@@ -1049,13 +1054,11 @@ class SerialToolboxMainWindow(QMainWindow):
 
     def _show_template_dialog(self):
         """显示模板管理对话框"""
-        dialog = ProtocolTemplateDialog(
-            self, self.protocol_registry.template_manager
-        )
+        dialog = ProtocolTemplateDialog(self, self.protocol_registry.template_manager)
         dialog.exec()
         # 刷新协议列表
         self.protocol_combo.clear()
-        self.protocol_combo.addItems(['自动检测'] + self.protocol_registry.list_protocols())
+        self.protocol_combo.addItems(["自动检测"] + self.protocol_registry.list_protocols())
 
     # ─── 多串口管理器对话框 ──────────────────────────────────
 
@@ -1069,24 +1072,24 @@ class SerialToolboxMainWindow(QMainWindow):
     @pyqtSlot(str)
     def on_serial_error(self, error_msg: str):
         """串口错误回调"""
-        QMessageBox.critical(self, '串口错误', error_msg)
+        QMessageBox.critical(self, "串口错误", error_msg)
 
     @pyqtSlot(bool)
     def on_connection_changed(self, connected: bool):
         """连接状态变化回调"""
         if connected:
-            self.connect_btn.setText('断开')
+            self.connect_btn.setText("断开")
             self.connect_btn.setChecked(True)
             config = self.serial_manager.config
             port = config.port if config else "?"
-            self.connection_label.setText(f'已连接: {port}')
-            self.connection_label.setStyleSheet('color: green;')
+            self.connection_label.setText(f"已连接: {port}")
+            self.connection_label.setStyleSheet("color: green;")
             self.set_controls_enabled(False)
         else:
-            self.connect_btn.setText('连接')
+            self.connect_btn.setText("连接")
             self.connect_btn.setChecked(False)
-            self.connection_label.setText('未连接')
-            self.connection_label.setStyleSheet('color: red;')
+            self.connection_label.setText("未连接")
+            self.connection_label.setStyleSheet("color: red;")
             self.set_controls_enabled(True)
             # 停止自动发送
             self.auto_send_check.setChecked(False)
@@ -1105,8 +1108,8 @@ class SerialToolboxMainWindow(QMainWindow):
 
     def update_status(self):
         """更新状态栏"""
-        self.rx_label.setText(f'RX: {self.received_bytes} bytes')
-        self.tx_label.setText(f'TX: {self.sent_bytes} bytes')
+        self.rx_label.setText(f"RX: {self.received_bytes} bytes")
+        self.tx_label.setText(f"TX: {self.sent_bytes} bytes")
 
     # ─── 配置管理 ────────────────────────────────────────────
 
@@ -1152,7 +1155,7 @@ class SerialToolboxMainWindow(QMainWindow):
         cfg.chart_channels = self.chart.channel_specs()
 
         self.config_mgr.save(cfg)
-        self.status_bar.showMessage('配置已保存', 2000)
+        self.status_bar.showMessage("配置已保存", 2000)
 
     # ─── 其他 ────────────────────────────────────────────────
 
@@ -1171,34 +1174,36 @@ class SerialToolboxMainWindow(QMainWindow):
     def export_log(self):
         """导出日志"""
         from PyQt6.QtWidgets import QFileDialog
+
         filename, _ = QFileDialog.getSaveFileName(
-            self, '导出日志', '', 'Text Files (*.txt);;CSV Files (*.csv);;All Files (*)'
+            self, "导出日志", "", "Text Files (*.txt);;CSV Files (*.csv);;All Files (*)"
         )
         if filename:
-            with open(filename, 'w', encoding='utf-8') as f:
+            with open(filename, "w", encoding="utf-8") as f:
                 f.write(self.receive_text.toPlainText())
-            QMessageBox.information(self, '成功', f'日志已导出到:\n{filename}')
+            QMessageBox.information(self, "成功", f"日志已导出到:\n{filename}")
 
     def show_about(self):
         """显示关于对话框"""
         QMessageBox.about(
-            self, '关于',
-            '串口调试助手 v4.0\n\n'
-            '功能:\n'
-            '• 串口通信 (HEX/ASCII 切换)\n'
-            '• 增强波形图 (多通道 + XY 李萨如)\n'
-            '• Modbus RTU 响应自动解析\n'
-            '• 协议插件框架 (CAN/I2C/UART-Packet)\n'
-            '• 预设指令管理\n'
-            '• DTR/RTS 信号线控制\n'
-            '• Modbus RTU 快捷操作\n'
-            '• 自动发送 (定时)\n'
-            '• 日志轮转 (按大小/时间/天)\n'
-            '• Python 脚本引擎 (断点/wait_response)\n'
-            '• 多串口对比 (最多4路)\n'
-            '• 多串口管理器 (独立配置)\n'
-            '• 配置保存/加载\n\n'
-            '基于 PyQt6 + pyqtgraph 开发'
+            self,
+            "关于",
+            "串口调试助手 v4.0\n\n"
+            "功能:\n"
+            "• 串口通信 (HEX/ASCII 切换)\n"
+            "• 增强波形图 (多通道 + XY 李萨如)\n"
+            "• Modbus RTU 响应自动解析\n"
+            "• 协议插件框架 (CAN/I2C/UART-Packet)\n"
+            "• 预设指令管理\n"
+            "• DTR/RTS 信号线控制\n"
+            "• Modbus RTU 快捷操作\n"
+            "• 自动发送 (定时)\n"
+            "• 日志轮转 (按大小/时间/天)\n"
+            "• Python 脚本引擎 (断点/wait_response)\n"
+            "• 多串口对比 (最多4路)\n"
+            "• 多串口管理器 (独立配置)\n"
+            "• 配置保存/加载\n\n"
+            "基于 PyQt6 + pyqtgraph 开发",
         )
 
     def closeEvent(self, a0: QCloseEvent | None) -> None:  # noqa: N803 - 名称需匹配 Qt 桩
@@ -1301,8 +1306,9 @@ class SerialToolboxMainWindow(QMainWindow):
 def main():
     """应用入口"""
     from PyQt6.QtWidgets import QApplication
+
     app = QApplication(sys.argv)
-    app.setApplicationName('Serial Toolbox')
+    app.setApplicationName("Serial Toolbox")
 
     window = SerialToolboxMainWindow()
     window.show()
@@ -1310,5 +1316,5 @@ def main():
     sys.exit(app.exec())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

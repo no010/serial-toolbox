@@ -12,22 +12,24 @@ from enum import Enum
 
 class RotateMode(Enum):
     """轮转模式"""
-    NONE = "none"          # 不轮转
-    BY_SIZE = "size"       # 按大小
-    BY_TIME = "time"       # 按时间
-    BY_DAY = "day"         # 按天
+
+    NONE = "none"  # 不轮转
+    BY_SIZE = "size"  # 按大小
+    BY_TIME = "time"  # 按时间
+    BY_DAY = "day"  # 按天
 
 
 @dataclass
 class LogConfig:
     """日志配置"""
+
     enabled: bool = True
     log_dir: str = ""
     rotate_mode: RotateMode = RotateMode.BY_SIZE
-    max_size_mb: float = 10.0      # 按大小时: 最大 MB
+    max_size_mb: float = 10.0  # 按大小时: 最大 MB
     rotate_interval_min: int = 60  # 按时间时: 间隔分钟
-    max_files: int = 50            # 最多保留文件数
-    prefix: str = "serial_log"     # 文件名前缀
+    max_files: int = 50  # 最多保留文件数
+    prefix: str = "serial_log"  # 文件名前缀
 
 
 class RotatingLogWriter:
@@ -42,9 +44,7 @@ class RotatingLogWriter:
         self._total_written: int = 0
 
         if not self.config.log_dir:
-            self.config.log_dir = os.path.join(
-                os.path.expanduser("~"), ".serial-toolbox", "logs"
-            )
+            self.config.log_dir = os.path.join(os.path.expanduser("~"), ".serial-toolbox", "logs")
 
         os.makedirs(self.config.log_dir, exist_ok=True)
 
@@ -53,11 +53,8 @@ class RotatingLogWriter:
 
     def _generate_filename(self) -> str:
         """生成日志文件名"""
-        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-        return os.path.join(
-            self.config.log_dir,
-            f"{self.config.prefix}_{ts}.log"
-        )
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return os.path.join(self.config.log_dir, f"{self.config.prefix}_{ts}.log")
 
     def _open_new_file(self):
         """打开新日志文件"""
@@ -65,7 +62,7 @@ class RotatingLogWriter:
             self._file.close()
 
         self._current_path = self._generate_filename()
-        self._file = open(self._current_path, 'a', encoding='utf-8')
+        self._file = open(self._current_path, "a", encoding="utf-8")
         self._current_size = 0
         self._rotate_time = time.time()
 
@@ -95,7 +92,7 @@ class RotatingLogWriter:
             files = []
             prefix = self.config.prefix
             for f in os.listdir(self.config.log_dir):
-                if f.startswith(prefix) and f.endswith('.log'):
+                if f.startswith(prefix) and f.endswith(".log"):
                     full_path = os.path.join(self.config.log_dir, f)
                     files.append((full_path, os.path.getmtime(full_path)))
 
@@ -103,7 +100,7 @@ class RotatingLogWriter:
             files.sort(key=lambda x: x[1], reverse=True)
 
             # 删除超出限制的
-            for old_file, _ in files[self.config.max_files:]:
+            for old_file, _ in files[self.config.max_files :]:
                 os.remove(old_file)
         except Exception:
             pass
@@ -119,25 +116,25 @@ class RotatingLogWriter:
         if self._file:
             self._file.write(data)
             self._file.flush()
-            self._current_size += len(data.encode('utf-8'))
-            self._total_written += len(data.encode('utf-8'))
+            self._current_size += len(data.encode("utf-8"))
+            self._total_written += len(data.encode("utf-8"))
 
     def write_rx(self, data: bytes, hex_mode: bool = False):
         """写入接收数据"""
-        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
         if hex_mode:
-            content = ' '.join(f'{b:02X}' for b in data)
+            content = " ".join(f"{b:02X}" for b in data)
         else:
-            content = data.decode('utf-8', errors='replace')
+            content = data.decode("utf-8", errors="replace")
         self.write(f"[{ts}] RX: {content}\n")
 
     def write_tx(self, data: bytes, hex_mode: bool = False):
         """写入发送数据"""
-        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
         if hex_mode:
-            content = ' '.join(f'{b:02X}' for b in data)
+            content = " ".join(f"{b:02X}" for b in data)
         else:
-            content = data.decode('utf-8', errors='replace')
+            content = data.decode("utf-8", errors="replace")
         self.write(f"[{ts}] TX: {content}\n")
 
     def get_current_path(self) -> str:
@@ -147,9 +144,9 @@ class RotatingLogWriter:
     def get_stats(self) -> dict:
         """获取统计信息"""
         return {
-            'current_file': self._current_path,
-            'current_size': self._current_size,
-            'total_written': self._total_written,
+            "current_file": self._current_path,
+            "current_size": self._current_size,
+            "total_written": self._total_written,
         }
 
     def flush(self):

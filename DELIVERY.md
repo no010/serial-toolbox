@@ -71,14 +71,16 @@ uv run pyinstaller serial-toolbox.spec --noconfirm --clean
 |----|------|
 | 自动化测试 | `uv run pytest` → **111 passed**（协议解析器往返 / 导出 / 配置 / 日志 / 脚本引擎长度与残帧与缩进块与暂停单步 / 图表通道模型与视图 / UI 面板与线程编组 / pyserial 传输端到端） |
 | 静态检查 | `uv run ruff check src/ tests/` → **All checks passed** |
+| 代码格式 | `uv run ruff format --check .` → **已统一**（ruff 默认风格；CI 与 pre-commit 均已锁定） |
 | 类型检查 | `uv run ty check src/ tests/` → **All checks passed**（51 处诊断已全部修复；门禁范围含 tests/）；交叉验证 `pyright src/ tests/` → **0 error** |
-| 本地钩子 | `.pre-commit-config.yaml`（ruff + ty，复用 uv 锁定版本） |
-| CI | push/PR 自动跑 ruff + ty + pytest（offscreen Qt）+ Windows 打包冒烟与产物上传 |
+| 本地钩子 | `.pre-commit-config.yaml`（ruff format + ruff check + ty，复用 uv 锁定版本） |
+| CI | push/PR 自动跑 ruff format --check + ruff + ty + pytest（offscreen Qt）+ Windows 打包冒烟与产物上传 |
 | 依赖锁定 | `uv.lock`（`uv lock --check` 通过） |
 
 ```bash
 uv run pytest -q                 # 运行测试
 uv run ruff check src/ tests/    # 静态检查
+uv run ruff format .             # 就地格式化（CI 里跑的是 --check，不改文件）
 ```
 
 ---

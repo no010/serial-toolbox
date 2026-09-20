@@ -1,4 +1,5 @@
 """图表视图层测试（offscreen Qt）：通道增删、节流与冻结、光标读数、CSV 导出、配置往返。"""
+
 import csv
 
 import pytest
@@ -30,7 +31,7 @@ class FakeFrame:
 @pytest.fixture
 def chart(qapp):
     widget = EnhancedChart(max_points=16, max_channels=3, refresh_ms=1000)
-    widget.refresh_timer.stop()          # 关掉自动节拍，由测试显式触发重绘
+    widget.refresh_timer.stop()  # 关掉自动节拍，由测试显式触发重绘
     yield widget
     widget.refresh_timer.stop()
 
@@ -53,6 +54,7 @@ def _count(widget: EnhancedChart, name: str) -> int:
 
 
 # ─── 通道 ───────────────────────────────────────────────────
+
 
 def test_add_and_remove_channel(chart):
     assert chart.add_channel(_raw()) is None
@@ -84,6 +86,7 @@ def test_curves_match_channels(chart):
 
 # ─── 取数 ───────────────────────────────────────────────────
 
+
 def test_feed_raw_only_reaches_raw_channels(chart):
     chart.add_channel(_raw("bytes"))
     chart.add_channel(ChannelSpec(name="temp", source=ChartSource.FIELD, key="temp"))
@@ -98,12 +101,15 @@ def test_feed_raw_only_reaches_raw_channels(chart):
 def test_feed_registers_uses_seen_addresses(chart):
     chart.add_channel(ChannelSpec(name="r0", source=ChartSource.REGISTER, key="0"))
     response = ModbusResponse(
-        slave_addr=1, function_code=3, is_error=False,
-        registers=[RegisterValue(address=0, raw_value=7, signed_value=7)])
+        slave_addr=1,
+        function_code=3,
+        is_error=False,
+        registers=[RegisterValue(address=0, raw_value=7, signed_value=7)],
+    )
 
     chart.feed_registers([response])
 
-    assert "0" in chart._seen_registers          # 见过的地址供通道下拉选择
+    assert "0" in chart._seen_registers  # 见过的地址供通道下拉选择
     assert _samples(chart, "r0") == [7.0]
 
 
@@ -123,7 +129,7 @@ def test_freeze_keeps_sampling_but_stops_repaint(chart):
     chart.freeze_btn.setChecked(True)
 
     painted = []
-    chart._update_plot = lambda: painted.append(1)   # type: ignore[method-assign]
+    chart._update_plot = lambda: painted.append(1)  # type: ignore[method-assign]
     chart.feed_raw(b"\x01")
     chart._repaint_if_dirty()
     assert painted == []
@@ -131,7 +137,7 @@ def test_freeze_keeps_sampling_but_stops_repaint(chart):
     chart.freeze_btn.setChecked(False)
     chart._repaint_if_dirty()
     assert painted == [1]
-    assert _count(chart, "bytes") == 1                   # 冻结期间数据没丢
+    assert _count(chart, "bytes") == 1  # 冻结期间数据没丢
 
 
 def test_repaint_is_throttled_to_timer_tick(chart):
@@ -143,16 +149,16 @@ def test_repaint_is_throttled_to_timer_tick(chart):
         painted.append(1)
         real_update()
 
-    chart._update_plot = spy                           # type: ignore[method-assign]
+    chart._update_plot = spy  # type: ignore[method-assign]
 
     chart.feed_raw(b"\x01")
     chart.feed_raw(b"\x02")
-    assert painted == []                               # 喂数据本身不重绘
+    assert painted == []  # 喂数据本身不重绘
 
     chart._repaint_if_dirty()
     assert painted == [1]
     chart._repaint_if_dirty()
-    assert painted == [1]                              # 无新数据不重复重绘
+    assert painted == [1]  # 无新数据不重复重绘
 
 
 def test_time_axis_plots_timestamps(chart):
@@ -163,14 +169,15 @@ def test_time_axis_plots_timestamps(chart):
 
     seen = {}
     curve = chart.curves["temp"]
-    curve.setData = lambda x, y=None: seen.update(x=x, y=y)   # type: ignore[method-assign]
+    curve.setData = lambda x, y=None: seen.update(x=x, y=y)  # type: ignore[method-assign]
     chart.store.feed_fields({"t": 1.0}, t=3.5)
     chart._update_plot()
 
-    assert float(seen['x'][0]) == pytest.approx(3.5)
+    assert float(seen["x"][0]) == pytest.approx(3.5)
 
 
 # ─── 光标与导出 ─────────────────────────────────────────────
+
 
 def test_cursor_readout_reports_deltas(chart):
     chart.add_channel(_raw("bytes"))
@@ -194,7 +201,7 @@ def test_xy_mode_uses_two_channels(qapp):
     widget.xy_x_combo.setCurrentText("x")
     widget.xy_y_combo.setCurrentText("y")
 
-    widget.mode_combo.setCurrentIndex(1)          # XY (李萨如)
+    widget.mode_combo.setCurrentIndex(1)  # XY (李萨如)
     seen = {}
     widget.xy_curve.setData = lambda x, y: seen.update(x=x, y=y)  # type: ignore[method-assign]
     widget.store.feed_raw(b"\x01\x02")
@@ -202,22 +209,22 @@ def test_xy_mode_uses_two_channels(qapp):
     widget._repaint_if_dirty()
 
     assert widget.xy_mode is True
-    assert list(seen['y']) == [9.0]
+    assert list(seen["y"]) == [9.0]
     widget.plot_widget.close()
 
 
 def test_cursor_readout_refreshes_with_new_data(qapp):
     widget = EnhancedChart(max_points=16, max_channels=2, refresh_ms=1000)
     widget.refresh_timer.stop()
-    assert '拖动竖线' in widget.cursor_label.text(), "构造期不该把提示文案覆盖成无可见通道"
+    assert "拖动竖线" in widget.cursor_label.text(), "构造期不该把提示文案覆盖成无可见通道"
 
     widget.add_channel(_raw("bytes"))
     widget.cursor_a.setPos(0)
     widget.cursor_b.setPos(2)
-    assert "无可见通道" in widget.cursor_label.text()      # 光标就位但还没数据
+    assert "无可见通道" in widget.cursor_label.text()  # 光标就位但还没数据
 
     widget.store.feed_raw(b"\x00\x0a\x14")
-    widget._update_plot()                                  # 只长数据，不移动光标
+    widget._update_plot()  # 只长数据，不移动光标
     assert "Δbytes=+20" in widget.cursor_label.text(), widget.cursor_label.text()
     widget.plot_widget.close()
 
@@ -252,10 +259,14 @@ def test_export_csv_writes_long_rows(chart, tmp_path):
 
 # ─── 配置与对话框 ───────────────────────────────────────────
 
+
 def test_channel_specs_round_trip(chart):
     chart.add_channel(_raw("bytes", dtype=RawDtype.INT16_BE))
-    chart.add_channel(ChannelSpec(name="temp", source=ChartSource.FIELD, key="temp",
-                                  unit="℃", scale=0.1, offset=-40))
+    chart.add_channel(
+        ChannelSpec(
+            name="temp", source=ChartSource.FIELD, key="temp", unit="℃", scale=0.1, offset=-40
+        )
+    )
 
     other = EnhancedChart(max_points=16, max_channels=3)
     other.refresh_timer.stop()
@@ -267,7 +278,7 @@ def test_channel_specs_round_trip(chart):
     assert temp is not None and raw is not None
     assert temp.spec.scale == 0.1
     assert raw.spec.dtype == RawDtype.INT16_BE
-    other.apply_channel_specs([{"bogus": 1}])          # 非法项应被跳过而不是抛出
+    other.apply_channel_specs([{"bogus": 1}])  # 非法项应被跳过而不是抛出
     assert other.channel_names() == ["bytes", "temp"]
 
 
@@ -290,5 +301,5 @@ def test_channel_dialog_spec_reflects_source(qapp):
 
     dialog.source_combo.setCurrentIndex(2)
     assert [dialog.key_combo.itemText(i) for i in range(dialog.key_combo.count())] == ["0", "3"]
-    assert dialog.key_combo.currentText() == "0"       # 候选重建后落在首项
+    assert dialog.key_combo.currentText() == "0"  # 候选重建后落在首项
     assert dialog.dtype_combo.isHidden() or not dialog.dtype_combo.isVisibleTo(dialog)
