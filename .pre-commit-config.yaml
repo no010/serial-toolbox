@@ -11,7 +11,7 @@ repos:
 
       - id: ty-check
         name: ty (类型检查)
-        entry: uv run ty check src/
+        entry: uv run ty check src/ tests/
         language: system
         pass_filenames: false
         types: [python]

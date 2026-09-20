@@ -33,7 +33,7 @@ jobs:
         run: uv run ruff check src/ tests/
 
       - name: Type check (ty)
-        run: uv run ty check src/
+        run: uv run ty check src/ tests/
 
       - name: Test (pytest, offscreen Qt)
         env:

@@ -7,8 +7,6 @@ v3.0 - 新增: Modbus解析、日志轮转、脚本引擎、多串口对比
 import sys
 from datetime import datetime
 
-import numpy as np
-import pyqtgraph as pg
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QAction, QCloseEvent, QFont, QTextCursor
 from PyQt6.QtWidgets import (
@@ -52,107 +50,6 @@ from src.ui.extended_panels import (
     ScriptEditorPanel,
 )
 from src.ui.multi_port_dialog import MultiPortManagerDialog
-
-# ─── 波形图组件 ───────────────────────────────────────────────
-
-class RealtimeChart(QWidget):
-    """实时数据波形图 (pyqtgraph)"""
-
-    def __init__(self, max_points=500):
-        super().__init__()
-        self.max_points = max_points
-        self.data_buffer = np.zeros(max_points)
-        self.ptr = 0
-
-        self.init_ui()
-
-    def init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        # 控制栏
-        ctrl = QHBoxLayout()
-        self.mode_combo = QComboBox()
-        self.mode_combo.addItems(['字节值 (0-255)', '解析为整数 (大端)', '解析为浮点 (IEEE754)'])
-        ctrl.addWidget(QLabel('数据模式:'))
-        ctrl.addWidget(self.mode_combo)
-
-        ctrl.addWidget(QLabel('  最大点数:'))
-        self.points_spin = QSpinBox()
-        self.points_spin.setRange(50, 5000)
-        self.points_spin.setValue(self.max_points)
-        self.points_spin.setSingleStep(50)
-        self.points_spin.valueChanged.connect(self.update_max_points)
-        ctrl.addWidget(self.points_spin)
-
-        clear_btn = QPushButton('清空波形')
-        clear_btn.clicked.connect(self.clear)
-        ctrl.addWidget(clear_btn)
-
-        ctrl.addStretch()
-        layout.addLayout(ctrl)
-
-        # pyqtgraph 绘图
-        pg.setConfigOptions(antialias=True)
-        self.plot_widget = pg.PlotWidget()
-        self.plot_widget.setBackground('#1e1e1e')
-        self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
-        self.plot_widget.setLabel('left', '数值')
-        self.plot_widget.setLabel('bottom', '采样点')
-
-        self.curve = self.plot_widget.plot(
-            pen=pg.mkPen(color='#4FC3F7', width=2),
-            connect='finite'
-        )
-
-        layout.addWidget(self.plot_widget)
-
-    def append_data(self, raw_bytes: bytes):
-        """追加原始数据到波形"""
-        mode = self.mode_combo.currentIndex()
-
-        if mode == 0:  # 字节值
-            values = list(raw_bytes)
-        elif mode == 1:  # 整数 (2字节大端)
-            values = []
-            for i in range(0, len(raw_bytes) - 1, 2):
-                val = int.from_bytes(raw_bytes[i:i+2], 'big', signed=True)
-                values.append(val)
-        else:  # 浮点 (4字节 IEEE754)
-            values = []
-            for i in range(0, len(raw_bytes) - 3, 4):
-                val = np.frombuffer(raw_bytes[i:i+4], dtype='>f4')[0]
-                values.append(float(val))
-
-        for val in values:
-            self.data_buffer[self.ptr % self.max_points] = val
-            self.ptr += 1
-
-        self._update_plot()
-
-    def _update_plot(self):
-        """更新绘图"""
-        if self.ptr <= self.max_points:
-            self.curve.setData(self.data_buffer[:self.ptr])
-        else:
-            # 滚动显示
-            start = self.ptr % self.max_points
-            rolled = np.roll(self.data_buffer, -start)
-            self.curve.setData(rolled)
-
-    def update_max_points(self, value):
-        """更新最大点数"""
-        self.max_points = value
-        self.data_buffer = np.zeros(value)
-        self.ptr = 0
-        self.curve.clear()
-
-    def clear(self):
-        """清空"""
-        self.data_buffer = np.zeros(self.max_points)
-        self.ptr = 0
-        self.curve.clear()
-
 
 # ─── 预设指令编辑对话框 ─────────────────────────────────────
 
@@ -343,6 +240,11 @@ class SerialToolboxMainWindow(QMainWindow):
     # 信号
     data_received = pyqtSignal(bytes)
     data_sent = pyqtSignal(bytes)
+    # SerialManager 的回调发生在读线程，这些信号负责把它们编组回 GUI 线程
+    error_received = pyqtSignal(str)
+    connection_state_changed = pyqtSignal(bool)
+    modem_signals_updated = pyqtSignal(dict)
+    multi_data_arrived = pyqtSignal(str, bytes)
 
     def __init__(self):
         super().__init__()
@@ -616,8 +518,11 @@ class SerialToolboxMainWindow(QMainWindow):
 
         tabs.addTab(text_widget, '📝 文本')
 
-        # Tab 2: 增强波形图 (多通道 + XY)
-        self.chart = EnhancedChart(max_points=self.app_config.chart_max_points, max_channels=4)
+        # Tab 2: 增强波形图 (数据通道 + XY)
+        self.chart = EnhancedChart(max_points=self.app_config.chart_max_points, max_channels=8)
+        self.chart.apply_channel_specs(self.app_config.chart_channels)
+        self.chart.set_x_axis_mode(self.app_config.chart_x_axis)
+        self.chart.collect_check.setChecked(self.app_config.chart_collect)
         tabs.addTab(self.chart, '📈 波形')
 
         # Tab 3: Modbus 响应解析
@@ -792,10 +697,16 @@ class SerialToolboxMainWindow(QMainWindow):
 
     def setup_connections(self):
         """设置信号槽连接"""
-        self.serial_manager.on_data_received = self.on_serial_data_received
-        self.serial_manager.on_error = self.on_serial_error
-        self.serial_manager.on_connection_changed = self.on_connection_changed
-        self.serial_manager.on_signal_changed = self._on_signals_changed
+        # 串口读线程的回调只能经信号编组回 GUI 线程，否则会在读线程里动 Qt 控件
+        self.serial_manager.on_data_received = self.data_received.emit
+        self.serial_manager.on_error = self.error_received.emit
+        self.serial_manager.on_connection_changed = self.connection_state_changed.emit
+        self.serial_manager.on_signal_changed = self.modem_signals_updated.emit
+
+        self.data_received.connect(self.on_serial_data_received)
+        self.error_received.connect(self.on_serial_error)
+        self.connection_state_changed.connect(self.on_connection_changed)
+        self.modem_signals_updated.connect(self._on_signals_changed)
 
         # Modbus 面板信号
         modbus_panel = self.findChild(ModbusPanel)
@@ -805,8 +716,10 @@ class SerialToolboxMainWindow(QMainWindow):
         # 脚本引擎日志
         self.script_panel.script_log.connect(self.script_panel.append_log)
 
-        # 多串口管理器回调
-        self.multi_manager.on_data_received = self._on_multi_data_received
+        # 多串口管理器回调（同样来自各自的读线程）
+        self.multi_manager.on_data_received = lambda name, data: self.multi_data_arrived.emit(
+            name, data)
+        self.multi_data_arrived.connect(self._on_multi_data_received)
 
     # ─── 串口操作 ────────────────────────────────────────────
 
@@ -851,20 +764,19 @@ class SerialToolboxMainWindow(QMainWindow):
 
     @pyqtSlot(bytes)
     def on_serial_data_received(self, data: bytes):
-        """串口数据接收回调"""
+        """串口数据接收回调（由 data_received 信号编组到 GUI 线程）"""
         self.received_bytes += len(data)
-        self.data_received.emit(data)
 
         # 文本显示
         self.display_received_data(data)
 
-        # 波形图显示 (多通道)
-        self.chart.append_data(data, channel=0)
+        # 图表：原始字节流通道
+        self.chart.feed_raw(data)
 
-        # Modbus 解析
-        self.modbus_response_panel.feed_data(data)
+        # Modbus 解析（寄存器值同时作为图表通道来源）
+        self.chart.feed_registers(self.modbus_response_panel.feed_data(data))
 
-        # 协议插件解析
+        # 协议插件解析（字段值同时作为图表通道来源）
         self._parse_protocol_data(data)
 
         # 日志记录
@@ -1108,31 +1020,27 @@ class SerialToolboxMainWindow(QMainWindow):
     def _parse_protocol_data(self, data: bytes):
         """解析协议数据"""
         frames = self.stream_parser.feed(data)
+        self.chart.feed_fields(frames)
         for frame in frames:
             self._add_protocol_frame(frame)
 
     def _add_protocol_frame(self, frame):
-        """添加协议帧到表格"""
-        row = self.protocol_table.rowCount()
-        self.protocol_table.insertRow(row)
-
-        self.protocol_table.setItem(row, 0, QTableWidgetItem(frame.timestamp))
-        self.protocol_table.setItem(row, 1, QTableWidgetItem(frame.protocol))
-
-        # 显示第一个字段
-        if frame.fields:
-            first_key = list(frame.fields.keys())[0]
-            self.protocol_table.setItem(row, 2, QTableWidgetItem(first_key))
-            self.protocol_table.setItem(row, 3, QTableWidgetItem(str(frame.fields[first_key])))
-        else:
-            self.protocol_table.setItem(row, 2, QTableWidgetItem('-'))
-            self.protocol_table.setItem(row, 3, QTableWidgetItem('-'))
-
-        # 原始数据
+        """添加协议帧到表格：每个字段一行"""
         raw_hex = ' '.join(f'{b:02X}' for b in frame.raw_data[:20])
         if len(frame.raw_data) > 20:
             raw_hex += '...'
-        self.protocol_table.setItem(row, 4, QTableWidgetItem(raw_hex))
+
+        fields = frame.fields or {'-': '-'}
+        for index, (key, value) in enumerate(fields.items()):
+            row = self.protocol_table.rowCount()
+            self.protocol_table.insertRow(row)
+
+            self.protocol_table.setItem(row, 0, QTableWidgetItem(frame.timestamp))
+            self.protocol_table.setItem(row, 1, QTableWidgetItem(frame.protocol))
+            self.protocol_table.setItem(row, 2, QTableWidgetItem(str(key)))
+            self.protocol_table.setItem(row, 3, QTableWidgetItem(str(value)))
+            # 同一帧的原始数据只在一行显示，避免多字段时重复刷屏
+            self.protocol_table.setItem(row, 4, QTableWidgetItem(raw_hex if index == 0 else ''))
 
     def _clear_protocol_table(self):
         """清空协议表格"""
@@ -1236,6 +1144,12 @@ class SerialToolboxMainWindow(QMainWindow):
         cfg.window_y = geo.y()
         cfg.window_w = geo.width()
         cfg.window_h = geo.height()
+
+        # 波形图现场
+        cfg.chart_max_points = self.chart.points_spin.value()
+        cfg.chart_collect = self.chart.is_collect_enabled()
+        cfg.chart_x_axis = self.chart.x_axis_mode()
+        cfg.chart_channels = self.chart.channel_specs()
 
         self.config_mgr.save(cfg)
         self.status_bar.showMessage('配置已保存', 2000)

@@ -46,7 +46,9 @@ class AppConfig:
 
     # 波形图配置
     chart_max_points: int = 500
-    chart_enabled: bool = False
+    chart_collect: bool = True           # 关掉后不再向图表缓冲写数据，也不重绘
+    chart_x_axis: str = "index"          # index | time
+    chart_channels: list = field(default_factory=list)  # [ChannelSpec.to_dict()]
 
 
 class ConfigManager:

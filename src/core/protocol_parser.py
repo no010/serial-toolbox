@@ -97,6 +97,27 @@ class ModbusRTU:
         return frame + struct.pack('<H', crc)
 
     @staticmethod
+    def expected_response_length(func_code: int, quantity: int = 0) -> int:
+        """
+        计算功能码正常响应帧的总字节数（含从机地址、功能码与 CRC16）。
+
+        读类功能码为 3 + 数据字节数 + 2，数据字节数由 quantity 决定；
+        写类功能码为固定 8 字节回显。异常响应不受 quantity 影响，恒为 5 字节
+        （从机地址 + 功能码|0x80 + 异常码 + CRC16）。
+
+        与 modbus_parser.ModbusResponseParser 的分帧长度算法保持一致。
+        """
+        if func_code in (0x01, 0x02):  # 读线圈 / 读离散输入：按位打包，向上取整到字节
+            byte_count = (quantity + 7) // 8
+        elif func_code in (0x03, 0x04):  # 读保持寄存器 / 读输入寄存器：每寄存器 2 字节
+            byte_count = 2 * quantity
+        elif func_code in (0x05, 0x06, 0x0F, 0x10):  # 写响应回显地址与数量
+            return 8
+        else:
+            raise ValueError(f"不支持的功能码: 0x{func_code:02X}")
+        return 3 + byte_count + 2
+
+    @staticmethod
     def parse_response(data: bytes) -> ModbusFrame:
         """解析响应帧"""
         if len(data) < 4:

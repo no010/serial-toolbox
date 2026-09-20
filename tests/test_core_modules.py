@@ -75,6 +75,38 @@ def test_config_load_missing_returns_default(tmp_path, monkeypatch):
     assert isinstance(cfg, AppConfig)
 
 
+def test_chart_config_round_trip(tmp_path, monkeypatch):
+    cm = ConfigManager()
+    monkeypatch.setattr(cm, "CONFIG_FILE", str(tmp_path / "cfg.json"))
+    cfg = cm.config
+    cfg.chart_max_points = 1200
+    cfg.chart_collect = False
+    cfg.chart_x_axis = "time"
+    cfg.chart_channels = [{"name": "temp", "source": "field", "key": "temp", "unit": "℃"}]
+    cm.save(cfg)
+
+    cm2 = ConfigManager()
+    monkeypatch.setattr(cm2, "CONFIG_FILE", str(tmp_path / "cfg.json"))
+    loaded = cm2.load()
+    assert loaded.chart_max_points == 1200
+    assert loaded.chart_collect is False
+    assert loaded.chart_x_axis == "time"
+    assert loaded.chart_channels[0]["key"] == "temp"
+
+
+def test_legacy_chart_enabled_key_is_ignored(tmp_path, monkeypatch):
+    """旧配置里 chart_enabled 定义了却从没人读，删除后加载不得报错，采样默认为开"""
+    config_file = tmp_path / "cfg.json"
+    config_file.write_text('{"chart_enabled": false, "baudrate": 9600}', encoding="utf-8")
+
+    cm = ConfigManager()
+    monkeypatch.setattr(cm, "CONFIG_FILE", str(config_file))
+    cfg = cm.load()
+
+    assert cfg.baudrate == 9600
+    assert cfg.chart_collect is True
+
+
 # ── logging_config ──────────────────────────────────────────
 
 def test_setup_logging_idempotent():
