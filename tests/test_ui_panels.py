@@ -134,6 +134,143 @@ def test_script_panel_shows_failure_reason(qapp):
     assert "脚本执行失败: boom (第 2 行)" in p.output_text.toPlainText()
 
 
+# ─── 断点行号槽 ──────────────────────────────────────────────
+
+
+def _press_gutter_at_line(gutter, edit, line: int):
+    """在行号槽上指定行的位置合成一次鼠标点击"""
+    from PyQt6.QtCore import QEvent, QPointF, Qt
+    from PyQt6.QtGui import QMouseEvent
+
+    block = edit.document().findBlockByNumber(line - 1)
+    top = edit.blockBoundingGeometry(block).translated(edit.contentOffset()).top()
+    event = QMouseEvent(
+        QEvent.Type.MouseButtonPress,
+        QPointF(gutter.width() / 2, top + 5),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    gutter.mousePressEvent(event)
+
+
+def test_gutter_click_toggles_engine_breakpoint(qapp):
+    from src.ui.extended_panels import ScriptEditorPanel
+
+    p = ScriptEditorPanel(FakeSM())
+    assert p.gutter.isVisibleTo(p), "有引擎时应显示行号槽"
+
+    _press_gutter_at_line(p.gutter, p.code_edit, 3)
+    assert p.engine is not None and p.engine.has_breakpoint(3)
+
+    _press_gutter_at_line(p.gutter, p.code_edit, 3)
+    assert not p.engine.has_breakpoint(3)
+
+
+def test_gutter_click_outside_text_does_nothing(qapp):
+    from src.ui.extended_panels import ScriptEditorPanel
+
+    p = ScriptEditorPanel(FakeSM())
+    p.code_edit.setPlainText("x = 1")  # 只有 1 行
+
+    _press_gutter_at_line(p.gutter, p.code_edit, 1)
+    assert p.engine is not None and p.engine.has_breakpoint(1)
+
+    from PyQt6.QtCore import QEvent, QPointF, Qt
+    from PyQt6.QtGui import QMouseEvent
+
+    # 点在最后一行之下（文档外空白），不得新增断点
+    event = QMouseEvent(
+        QEvent.Type.MouseButtonPress,
+        QPointF(p.gutter.width() / 2, p.gutter.height() - 1),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    p.gutter.mousePressEvent(event)
+    assert p.engine.breakpoints == {1: p.engine.breakpoints[1]}
+
+
+def test_gutter_hidden_and_inert_without_engine(qapp):
+    from src.ui.extended_panels import ScriptEditorPanel
+
+    p = ScriptEditorPanel(None)
+    assert not p.gutter.isVisibleTo(p), "无引擎时不应显示行号槽"
+    _press_gutter_at_line(p.gutter, p.code_edit, 2)  # engine 为 None，不得抛错
+
+
+def test_gutter_hit_line_follows_breakpoint_signal(qapp):
+    from src.ui.extended_panels import ScriptEditorPanel
+
+    p = ScriptEditorPanel(FakeSM())
+    p.breakpoint_hit.emit(4)
+    assert p.gutter.hit_line == 4
+
+    p.script_state_changed.emit("running")
+    assert p.gutter.hit_line == 0, "离开断点状态后高亮应清除"
+
+
+def test_gutter_paints_dot_and_keeps_line_numbers(qapp):
+    """断点行画红点但行号不能被顶掉；无断点时只有行号。"""
+    from PyQt6.QtGui import QImage
+
+    from src.ui.extended_panels import ScriptEditorPanel
+
+    p = ScriptEditorPanel(FakeSM())
+    p.resize(600, 300)
+    p.code_edit.setPlainText("a = 1\nb = 2\nc = 3\n")
+    p.show()
+    QCoreApplication.processEvents()
+
+    def ink():
+        """返回槽内与背景不同的像素分类集合：'dot' = 红点，'ink' = 行号笔画"""
+        img = p.gutter.grab().toImage().convertToFormat(QImage.Format.Format_RGB32)
+        bg = img.pixelColor(0, img.height() - 2)
+        kinds = set()
+        for y in range(img.height() - 2):
+            for x in range(img.width()):
+                c = img.pixelColor(x, y)
+                if (
+                    abs(c.red() - bg.red())
+                    + abs(c.green() - bg.green())
+                    + abs(c.blue() - bg.blue())
+                    < 60
+                ):
+                    continue
+                kinds.add("dot" if c.red() > 150 and c.green() < 90 and c.blue() < 90 else "ink")
+        return kinds
+
+    assert ink() == {"ink"}, "无断点时应当只画行号"
+
+    assert p.engine is not None
+    p.engine.set_breakpoint(2)
+    p.gutter.repaint()
+    QCoreApplication.processEvents()
+    kinds = ink()
+    assert "dot" in kinds, "断点行未画出红点"
+    assert "ink" in kinds, "行号数字被红点顶掉了"
+
+
+def test_gutter_breakpoint_pauses_script_run(qapp):
+    """行号槽点击 → 引擎断点 → 真实运行停在该行并高亮。"""
+    from src.ui.extended_panels import ScriptEditorPanel
+
+    p = ScriptEditorPanel(FakeSM())
+    p.script_log.connect(p.append_log)
+    p.code_edit.setPlainText('log_info("a")\nlog_info("b")')
+
+    _press_gutter_at_line(p.gutter, p.code_edit, 2)
+    p._run_script()
+
+    assert p.engine is not None
+    engine = p.engine
+    assert _wait_for(lambda: engine.state.name == "BREAKPOINT"), "断点未命中"
+    assert _wait_for(lambda: p.gutter.hit_line == 2), "命中行未高亮"
+
+    p._resume_script()
+    assert _wait_for(lambda: "脚本执行完毕" in p.output_text.toPlainText())
+
+
 def test_script_panel_pause_resume_through_ui(qapp):
     """UI 层端到端：真实引擎线程 + 跨线程状态信号 + 暂停/恢复按钮。"""
     from src.ui.extended_panels import ScriptEditorPanel
