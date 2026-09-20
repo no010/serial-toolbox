@@ -9,7 +9,7 @@ from src.core.chart_model import ChannelSpec, ChartSource, RawDtype
 from src.core.modbus_parser import ModbusResponse, RegisterValue
 from src.ui.enhanced_chart import (
     DTYPE_BY_INDEX,
-    DTYPE_LABELS,
+    DTYPE_KEYS,
     INDEX_BY_DTYPE,
     ChannelSpecDialog,
     EnhancedChart,
@@ -286,7 +286,7 @@ def test_dtype_index_maps_follow_the_enum():
     """回归：映射曾按显示字符串建键，用 RawDtype 查会 KeyError"""
     assert {i: d for i, d in enumerate(RawDtype)} == DTYPE_BY_INDEX
     assert {d: i for i, d in enumerate(RawDtype)} == INDEX_BY_DTYPE
-    assert set(DTYPE_LABELS) == set(RawDtype)
+    assert set(DTYPE_KEYS) == set(RawDtype)
 
 
 def test_channel_dialog_spec_reflects_source(qapp):
