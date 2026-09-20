@@ -41,6 +41,18 @@ from src.protocols.template_parser import (
     ProtocolTemplateManager,
     create_sample_template,
 )
+from src.ui.i18n import I18nManager
+
+
+def _retranslate_combo(combo: QComboBox, items: list[str]):
+    """重填下拉框并保留当前选中项（切换语言时用）；空框选回第一项"""
+    index = combo.currentIndex()
+    combo.blockSignals(True)
+    combo.clear()
+    combo.addItems(items)
+    combo.setCurrentIndex(index if index >= 0 else 0)
+    combo.blockSignals(False)
+
 
 # ─── Modbus 响应解析面板 ─────────────────────────────────────
 
@@ -48,31 +60,51 @@ from src.protocols.template_parser import (
 class ModbusResponsePanel(QGroupBox):
     """Modbus 响应解析结果面板"""
 
-    def __init__(self):
-        super().__init__("Modbus 响应解析")
+    def __init__(self, i18n: I18nManager | None = None):
+        self.i18n = i18n or I18nManager()
+        super().__init__()
         self.parser = ModbusResponseParser()
         self.init_ui()
+        self.retranslate_ui()
+
+    def retranslate_ui(self):
+        tr = self.i18n.tr
+        self.setTitle(tr("group_modbus_response"))
+        self.auto_detect_label.setText(tr("label_auto_detect"))
+        self.clear_btn.setText(tr("btn_clear"))
+        self.response_table.setHorizontalHeaderLabels(
+            [
+                tr("col_time"),
+                tr("col_slave"),
+                tr("col_func"),
+                tr("col_reg_addr"),
+                tr("col_raw"),
+                tr("col_signed"),
+            ]
+        )
+        self.register_table.setHorizontalHeaderLabels(
+            [tr("col_address"), tr("col_hex_value"), tr("col_dec"), tr("col_float")]
+        )
+        self.reg_detail_label.setText(tr("label_reg_detail"))
 
     def init_ui(self):
         layout = QVBoxLayout(self)
 
         # 控制栏
         ctrl = QHBoxLayout()
-        ctrl.addWidget(QLabel("自动检测 Modbus 帧并解析寄存器值"))
+        self.auto_detect_label = QLabel()
+        ctrl.addWidget(self.auto_detect_label)
         ctrl.addStretch()
 
-        clear_btn = QPushButton("清空")
-        clear_btn.clicked.connect(self.clear)
-        ctrl.addWidget(clear_btn)
+        self.clear_btn = QPushButton()
+        self.clear_btn.clicked.connect(self.clear)
+        ctrl.addWidget(self.clear_btn)
 
         layout.addLayout(ctrl)
 
         # 响应历史表格
         self.response_table = QTableWidget()
         self.response_table.setColumnCount(6)
-        self.response_table.setHorizontalHeaderLabels(
-            ["时间", "从机", "功能码", "寄存器地址", "原始值", "有符号值"]
-        )
         response_header = self.response_table.horizontalHeader()
         assert response_header is not None
         response_header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -82,14 +114,12 @@ class ModbusResponsePanel(QGroupBox):
         # 寄存器值详情
         self.register_table = QTableWidget()
         self.register_table.setColumnCount(4)
-        self.register_table.setHorizontalHeaderLabels(
-            ["地址", "HEX", "DEC (有符号)", "Float (IEEE754)"]
-        )
         register_header = self.register_table.horizontalHeader()
         assert register_header is not None
         register_header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.register_table.setMaximumHeight(150)
-        layout.addWidget(QLabel("寄存器详情:"))
+        self.reg_detail_label = QLabel()
+        layout.addWidget(self.reg_detail_label)
         layout.addWidget(self.register_table)
 
     def feed_data(self, data: bytes) -> list[ModbusResponse]:
@@ -118,7 +148,8 @@ class ModbusResponsePanel(QGroupBox):
 
         if resp.is_error:
             # 错误响应
-            self.response_table.setItem(row, 3, QTableWidgetItem(f"错误: {resp.error_msg}"))
+            error_text = f"{self.i18n.tr('text_error_prefix')} {resp.error_msg}"
+            self.response_table.setItem(row, 3, QTableWidgetItem(error_text))
             self.response_table.setItem(row, 4, QTableWidgetItem(""))
             self.response_table.setItem(row, 5, QTableWidgetItem(""))
         else:
@@ -134,25 +165,25 @@ class ModbusResponsePanel(QGroupBox):
                 # 更新寄存器详情表
                 self._update_register_table(resp.registers)
             else:
-                self.response_table.setItem(row, 3, QTableWidgetItem("写操作"))
+                self.response_table.setItem(row, 3, QTableWidgetItem(self.i18n.tr("text_write_op")))
                 self.response_table.setItem(row, 4, QTableWidgetItem(""))
                 self.response_table.setItem(row, 5, QTableWidgetItem(""))
 
     def _get_func_name(self, func_code: int) -> str:
         """获取功能码名称"""
-        names = {
-            0x01: "读线圈",
-            0x02: "读离散输入",
-            0x03: "读保持寄存器",
-            0x04: "读输入寄存器",
-            0x05: "写单个线圈",
-            0x06: "写单个寄存器",
-            0x0F: "写多个线圈",
-            0x10: "写多个寄存器",
+        key_by_code = {
+            0x01: "func_01",
+            0x02: "func_02",
+            0x03: "func_03",
+            0x04: "func_04",
+            0x05: "func_05",
+            0x06: "func_06",
+            0x0F: "func_0f",
+            0x10: "func_10",
         }
         if func_code & 0x80:
-            return "错误"
-        return names.get(func_code, "未知")
+            return self.i18n.tr("func_error")
+        return self.i18n.tr(key_by_code.get(func_code, "func_unknown"))
 
     def _update_register_table(self, registers):
         """更新寄存器详情表"""
@@ -177,54 +208,76 @@ class ModbusResponsePanel(QGroupBox):
 class LogSettingsDialog(QDialog):
     """日志设置对话框"""
 
-    def __init__(self, parent=None, config: LogConfig | None = None):
+    def __init__(
+        self, parent=None, config: LogConfig | None = None, i18n: I18nManager | None = None
+    ):
         super().__init__(parent)
-        self.setWindowTitle("日志设置")
+        self.i18n = i18n or I18nManager()
         self.setFixedSize(450, 300)
         self.config = config or LogConfig()
         self.init_ui()
+        self.retranslate_ui()
         self.load_config()
+
+    def retranslate_ui(self):
+        tr = self.i18n.tr
+        self.setWindowTitle(tr("dialog_log_settings"))
+        self.enable_check.setText(tr("check_enable_log"))
+        self.browse_btn.setText(tr("btn_browse"))
+        self.dir_label.setText(tr("label_log_dir"))
+        _retranslate_combo(
+            self.mode_combo,
+            [tr("rotate_none"), tr("rotate_size"), tr("rotate_time"), tr("rotate_day")],
+        )
+        self.mode_label.setText(tr("label_rotate_mode"))
+        self.size_label.setText(tr("label_max_size"))
+        self.interval_label.setText(tr("label_rotate_interval"))
+        self.interval_spin.setSuffix(tr("suffix_minutes"))
+        self.max_files_label.setText(tr("label_max_files"))
 
     def init_ui(self):
         layout = QFormLayout(self)
 
         # 启用日志
-        self.enable_check = QCheckBox("启用自动日志记录")
+        self.enable_check = QCheckBox()
         layout.addRow(self.enable_check)
 
         # 日志目录
         dir_layout = QHBoxLayout()
         self.dir_edit = QLineEdit()
         dir_layout.addWidget(self.dir_edit)
-        browse_btn = QPushButton("浏览...")
-        browse_btn.clicked.connect(self._browse_dir)
-        dir_layout.addWidget(browse_btn)
-        layout.addRow("日志目录:", dir_layout)
+        self.browse_btn = QPushButton()
+        self.browse_btn.clicked.connect(self._browse_dir)
+        dir_layout.addWidget(self.browse_btn)
+        self.dir_label = QLabel()
+        layout.addRow(self.dir_label, dir_layout)
 
         # 轮转模式
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["不轮转", "按大小", "按时间", "按天"])
-        layout.addRow("轮转模式:", self.mode_combo)
+        self.mode_label = QLabel()
+        layout.addRow(self.mode_label, self.mode_combo)
 
         # 最大大小 (MB)
         self.size_spin = QSpinBox()
         self.size_spin.setRange(1, 1000)
         self.size_spin.setValue(10)
         self.size_spin.setSuffix(" MB")
-        layout.addRow("最大文件大小:", self.size_spin)
+        self.size_label = QLabel()
+        layout.addRow(self.size_label, self.size_spin)
 
         # 轮转间隔 (分钟)
         self.interval_spin = QSpinBox()
         self.interval_spin.setRange(1, 1440)
         self.interval_spin.setValue(60)
-        self.interval_spin.setSuffix(" 分钟")
-        layout.addRow("轮转间隔:", self.interval_spin)
+        self.interval_label = QLabel()
+        layout.addRow(self.interval_label, self.interval_spin)
 
         # 最大文件数
         self.max_files_spin = QSpinBox()
         self.max_files_spin.setRange(1, 1000)
         self.max_files_spin.setValue(50)
-        layout.addRow("最多保留文件:", self.max_files_spin)
+        self.max_files_label = QLabel()
+        layout.addRow(self.max_files_label, self.max_files_spin)
 
         # 按钮
         buttons = QDialogButtonBox(
@@ -236,7 +289,7 @@ class LogSettingsDialog(QDialog):
 
     def _browse_dir(self):
         """浏览目录"""
-        dir_path = QFileDialog.getExistingDirectory(self, "选择日志目录")
+        dir_path = QFileDialog.getExistingDirectory(self, self.i18n.tr("title_browse_log_dir"))
         if dir_path:
             self.dir_edit.setText(dir_path)
 
@@ -286,18 +339,19 @@ class ScriptEditorPanel(QGroupBox):
     script_finished = pyqtSignal(bool, str)
     script_state_changed = pyqtSignal(str)
 
-    _STATE_LABELS = {
-        "idle": "空闲",
-        "running": "运行中",
-        "paused": "已暂停",
-        "stopped": "已结束",
-        "error": "出错",
-        "breakpoint": "断点暂停",
+    _STATE_KEYS = {
+        "idle": "status_idle",
+        "running": "status_running",
+        "paused": "status_paused",
+        "stopped": "status_stopped",
+        "error": "status_error",
+        "breakpoint": "status_breakpoint",
     }
     _RUNNING_STATES = ("running", "paused", "breakpoint")
 
-    def __init__(self, serial_manager=None):
-        super().__init__("Python 脚本引擎")
+    def __init__(self, serial_manager=None, i18n: I18nManager | None = None):
+        self.i18n = i18n or I18nManager()
+        super().__init__()
         self.serial_manager = serial_manager
         self.engine = ScriptEngine(serial_manager) if serial_manager else None
         if self.engine:
@@ -307,41 +361,56 @@ class ScriptEditorPanel(QGroupBox):
             self.engine.on_finished = self.script_finished.emit
             self.engine.on_state_changed = lambda state: self.script_state_changed.emit(state.value)
         self.init_ui()
+        self.retranslate_ui()
+
+    def retranslate_ui(self):
+        tr = self.i18n.tr
+        self.setTitle(tr("group_script"))
+        self.example_label.setText(tr("label_example"))
+        self.run_btn.setText(tr("btn_run"))
+        self.pause_btn.setText(tr("btn_pause"))
+        self.resume_btn.setText(tr("btn_resume"))
+        self.step_btn.setText(tr("btn_step"))
+        self.stop_btn.setText(tr("btn_stop"))
+        self.clear_output_btn.setText(tr("btn_clear_output"))
+        self.output_label.setText(tr("label_output"))
+        self._update_controls(self._last_state)
 
     def init_ui(self):
         layout = QVBoxLayout(self)
 
         # 示例选择
         ctrl = QHBoxLayout()
-        ctrl.addWidget(QLabel("示例脚本:"))
+        self.example_label = QLabel()
+        ctrl.addWidget(self.example_label)
         self.example_combo = QComboBox()
         self.example_combo.addItems(list(EXAMPLE_SCRIPTS.keys()))
         self.example_combo.currentTextChanged.connect(self._load_example)
         ctrl.addWidget(self.example_combo)
 
-        self.run_btn = QPushButton("▶️ 运行")
+        self.run_btn = QPushButton()
         self.run_btn.clicked.connect(self._run_script)
         ctrl.addWidget(self.run_btn)
 
-        self.pause_btn = QPushButton("⏸ 暂停")
+        self.pause_btn = QPushButton()
         self.pause_btn.clicked.connect(self._pause_script)
         ctrl.addWidget(self.pause_btn)
 
-        self.resume_btn = QPushButton("▶ 恢复")
+        self.resume_btn = QPushButton()
         self.resume_btn.clicked.connect(self._resume_script)
         ctrl.addWidget(self.resume_btn)
 
-        self.step_btn = QPushButton("⏭ 单步")
+        self.step_btn = QPushButton()
         self.step_btn.clicked.connect(self._step_script)
         ctrl.addWidget(self.step_btn)
 
-        self.stop_btn = QPushButton("⏹ 停止")
+        self.stop_btn = QPushButton()
         self.stop_btn.clicked.connect(self._stop_script)
         ctrl.addWidget(self.stop_btn)
 
-        clear_btn = QPushButton("清空输出")
-        clear_btn.clicked.connect(self._clear_output)
-        ctrl.addWidget(clear_btn)
+        self.clear_output_btn = QPushButton()
+        self.clear_output_btn.clicked.connect(self._clear_output)
+        ctrl.addWidget(self.clear_output_btn)
 
         ctrl.addStretch()
         layout.addLayout(ctrl)
@@ -353,7 +422,8 @@ class ScriptEditorPanel(QGroupBox):
 
         # 输出区
         head = QHBoxLayout()
-        head.addWidget(QLabel("输出:"))
+        self.output_label = QLabel()
+        head.addWidget(self.output_label)
         self.state_label = QLabel()
         head.addWidget(self.state_label)
         head.addStretch()
@@ -369,6 +439,7 @@ class ScriptEditorPanel(QGroupBox):
 
         # 加载下拉框当前选中的示例（此前写死了一个不存在的示例名，代码区一直是空的）
         self._load_example(self.example_combo.currentText())
+        self._last_state = "idle"
         self._update_controls("idle")
 
     def _load_example(self, name: str):
@@ -379,7 +450,7 @@ class ScriptEditorPanel(QGroupBox):
     def _run_script(self):
         """运行脚本"""
         if not self.engine:
-            self.output_text.append("未提供串口管理器，脚本引擎不可用")
+            self.output_text.append(self.i18n.tr("script_no_manager"))
             return
         self.engine.execute(self.code_edit.toPlainText())
 
@@ -409,7 +480,9 @@ class ScriptEditorPanel(QGroupBox):
 
     def _update_controls(self, state: str):
         """按引擎状态切换按钮可用性，避免运行结束后按钮失真"""
-        self.state_label.setText(f"状态: {self._STATE_LABELS.get(state, state)}")
+        self._last_state = state
+        state_text = self.i18n.tr(self._STATE_KEYS.get(state, "status_error"))
+        self.state_label.setText(f"{self.i18n.tr('label_status_prefix')} {state_text}")
         running = state in self._RUNNING_STATES
         self.run_btn.setEnabled(self.engine is not None and not running)
         self.pause_btn.setEnabled(state == "running")
@@ -419,7 +492,8 @@ class ScriptEditorPanel(QGroupBox):
 
     def _on_engine_finished(self, success: bool, msg: str):
         """脚本结束（由 script_finished 跨线程触发）"""
-        self.output_text.append(f"脚本执行完毕: {msg}" if success else f"脚本执行失败: {msg}")
+        key = "script_finished_ok" if success else "script_finished_fail"
+        self.output_text.append(self.i18n.tr(key, msg))
 
     @pyqtSlot(str)
     def append_log(self, msg: str):
@@ -437,11 +511,23 @@ class ScriptEditorPanel(QGroupBox):
 class MultiSerialComparePanel(QGroupBox):
     """多串口对比面板"""
 
-    def __init__(self, manager):
-        super().__init__("多串口对比")
+    def __init__(self, manager, i18n: I18nManager | None = None):
+        self.i18n = i18n or I18nManager()
+        super().__init__()
         self.multi_manager = manager
         self.text_areas = {}
+        self.slot_connect_buttons: list[QPushButton] = []
         self.init_ui()
+        self.retranslate_ui()
+
+    def retranslate_ui(self):
+        tr = self.i18n.tr
+        self.setTitle(tr("group_compare"))
+        self.clear_all_btn.setText(tr("btn_clear_all"))
+        for button in self.slot_connect_buttons:
+            button.setText(tr("btn_slot_connect"))
+        for name, text_area in self.text_areas.items():
+            text_area.setPlaceholderText(tr("slot_placeholder", name))
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -454,9 +540,9 @@ class MultiSerialComparePanel(QGroupBox):
 
         ctrl.addStretch()
 
-        clear_btn = QPushButton("清空全部")
-        clear_btn.clicked.connect(self.clear_all)
-        ctrl.addWidget(clear_btn)
+        self.clear_all_btn = QPushButton()
+        self.clear_all_btn.clicked.connect(self.clear_all)
+        ctrl.addWidget(self.clear_all_btn)
 
         layout.addLayout(ctrl)
 
@@ -489,7 +575,8 @@ class MultiSerialComparePanel(QGroupBox):
         check.stateChanged.connect(lambda state, n=name: self._on_slot_toggled(n, state))
         layout.addWidget(check)
 
-        connect_btn = QPushButton("连接")
+        connect_btn = QPushButton()
+        self.slot_connect_buttons.append(connect_btn)
         connect_btn.clicked.connect(lambda checked, n=name: self._connect_slot(n))
         layout.addWidget(connect_btn)
 
@@ -500,7 +587,6 @@ class MultiSerialComparePanel(QGroupBox):
         text = QTextEdit()
         text.setReadOnly(True)
         text.setFont(QFont("Consolas", 9))
-        text.setPlaceholderText(f"{name} - 未连接")
         text.setMaximumHeight(150)
         return text
 
@@ -513,7 +599,7 @@ class MultiSerialComparePanel(QGroupBox):
         """连接槽位 (简化版，实际需要弹出配置对话框)"""
         # 这里简化处理，实际应该弹出配置对话框
         QMessageBox.information(
-            self, "提示", f"请在主界面配置 {name} 的串口参数\n多串口完整配置功能开发中..."
+            self, self.i18n.tr("title_hint"), self.i18n.tr("msg_slot_hint", name)
         )
 
     def append_data(self, slot_name: str, data: bytes, hex_mode: bool = False):
@@ -538,22 +624,34 @@ class MultiSerialComparePanel(QGroupBox):
 class ProtocolTemplateDialog(QDialog):
     """自定义协议模板管理对话框"""
 
-    def __init__(self, parent=None, template_manager=None):
+    def __init__(self, parent=None, template_manager=None, i18n: I18nManager | None = None):
         super().__init__(parent)
-        self.setWindowTitle("协议模板管理")
+        self.i18n = i18n or I18nManager()
         self.setFixedSize(800, 600)
         self.template_manager: ProtocolTemplateManager = (
             template_manager or ProtocolTemplateManager()
         )
         self.init_ui()
+        self.retranslate_ui()
         self.refresh_template_list()
+
+    def retranslate_ui(self):
+        tr = self.i18n.tr
+        self.setWindowTitle(tr("dialog_template_mgmt"))
+        self.desc_label.setText(tr("desc_templates"))
+        self.loaded_label.setText(tr("label_loaded_templates"))
+        self.new_btn.setText(tr("btn_new"))
+        self.sample_btn.setText(tr("btn_sample"))
+        self.del_btn.setText(tr("btn_delete"))
+        self.json_label.setText(tr("label_template_json"))
+        self.preview_label.setText(tr("label_preview"))
 
     def init_ui(self):
         layout = QVBoxLayout(self)
 
         # 顶部说明
-        desc = QLabel("通过 JSON 模板定义自定义协议帧格式，无需编写 Python 代码")
-        layout.addWidget(desc)
+        self.desc_label = QLabel()
+        layout.addWidget(self.desc_label)
 
         # 主体分割
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -561,7 +659,8 @@ class ProtocolTemplateDialog(QDialog):
         # 左侧：模板列表
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
-        left_layout.addWidget(QLabel("已加载模板:"))
+        self.loaded_label = QLabel()
+        left_layout.addWidget(self.loaded_label)
 
         self.template_list = QListWidget()
         self.template_list.currentItemChanged.connect(self._on_template_selected)
@@ -569,17 +668,17 @@ class ProtocolTemplateDialog(QDialog):
 
         # 左侧按钮
         btn_layout = QHBoxLayout()
-        new_btn = QPushButton("➕ 新建")
-        new_btn.clicked.connect(self._create_new_template)
-        btn_layout.addWidget(new_btn)
+        self.new_btn = QPushButton()
+        self.new_btn.clicked.connect(self._create_new_template)
+        btn_layout.addWidget(self.new_btn)
 
-        sample_btn = QPushButton("📋 示例")
-        sample_btn.clicked.connect(self._load_sample_template)
-        btn_layout.addWidget(sample_btn)
+        self.sample_btn = QPushButton()
+        self.sample_btn.clicked.connect(self._load_sample_template)
+        btn_layout.addWidget(self.sample_btn)
 
-        del_btn = QPushButton("🗑️ 删除")
-        del_btn.clicked.connect(self._delete_template)
-        btn_layout.addWidget(del_btn)
+        self.del_btn = QPushButton()
+        self.del_btn.clicked.connect(self._delete_template)
+        btn_layout.addWidget(self.del_btn)
 
         left_layout.addLayout(btn_layout)
         splitter.addWidget(left_widget)
@@ -587,14 +686,16 @@ class ProtocolTemplateDialog(QDialog):
         # 右侧：JSON 编辑区
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
-        right_layout.addWidget(QLabel("模板 JSON:"))
+        self.json_label = QLabel()
+        right_layout.addWidget(self.json_label)
 
         self.json_edit = QPlainTextEdit()
         self.json_edit.setFont(QFont("Consolas", 10))
         right_layout.addWidget(self.json_edit)
 
         # 预览区
-        right_layout.addWidget(QLabel("预览:"))
+        self.preview_label = QLabel()
+        right_layout.addWidget(self.preview_label)
         self.preview_text = QTextBrowser()
         self.preview_text.setFont(QFont("Consolas", 9))
         self.preview_text.setMaximumHeight(120)
@@ -655,8 +756,8 @@ class ProtocolTemplateDialog(QDialog):
         name = current.text()
         reply = QMessageBox.question(
             self,
-            "确认删除",
-            f'确定删除模板 "{name}" 吗？',
+            self.i18n.tr("title_confirm_delete"),
+            self.i18n.tr("msg_confirm_delete", name),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
@@ -669,32 +770,39 @@ class ProtocolTemplateDialog(QDialog):
             data = json.loads(self.json_edit.toPlainText())
             template = ProtocolTemplate.from_dict(data)
             if not template.name:
-                raise ValueError("模板名称不能为空")
+                raise ValueError(self.i18n.tr("err_template_name"))
             self.template_manager.save_template(template)
             self.refresh_template_list()
-            QMessageBox.information(self, "保存成功", f'模板 "{template.name}" 已保存')
+            QMessageBox.information(
+                self,
+                self.i18n.tr("title_save_success"),
+                self.i18n.tr("msg_template_saved", template.name),
+            )
         except Exception as e:
-            QMessageBox.critical(self, "保存失败", f"JSON 格式错误: {str(e)}")
+            QMessageBox.critical(
+                self, self.i18n.tr("title_save_fail"), self.i18n.tr("msg_json_error", str(e))
+            )
 
     def _update_preview(self, template: ProtocolTemplate):
         """更新预览信息"""
+        tr = self.i18n.tr
         fields = template.fields
         field_lines = []
         for f in fields:
             field_lines.append(f"  - {f.get('name')}: {f.get('type')} @ offset {f.get('offset')}")
 
         preview = [
-            f"协议名称: {template.name}",
-            f"描述: {template.description}",
-            f"帧头: {template.header or '(无)'}",
-            f"帧尾: {template.tail or '(无)'}",
-            f"最小长度: {template.min_length}",
+            f"{tr('pv_name')} {template.name}",
+            f"{tr('pv_desc')} {template.description}",
+            f"{tr('pv_header')} {template.header or tr('pv_none')}",
+            f"{tr('pv_tail')} {template.tail or tr('pv_none')}",
+            f"{tr('pv_min_len')} {template.min_length}",
             "",
-            "字段列表:",
+            tr("pv_fields"),
         ]
         if field_lines:
             preview.extend(field_lines)
         else:
-            preview.append("  (无字段定义)")
+            preview.append(f"  {tr('pv_no_fields')}")
 
         self.preview_text.setPlainText("\n".join(preview))

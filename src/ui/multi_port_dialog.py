@@ -19,43 +19,59 @@ from PyQt6.QtWidgets import (
 )
 
 from src.core.serial_manager import SerialConfig, SerialManager
+from src.ui.i18n import I18nManager
 
 
 class MultiPortConfigDialog(QDialog):
     """多串口配置对话框"""
 
-    def __init__(self, parent=None, slot_name: str = "Port A"):
+    def __init__(self, parent=None, slot_name: str = "Port A", i18n: I18nManager | None = None):
         super().__init__(parent)
+        self.i18n = i18n or I18nManager()
         self.slot_name = slot_name
         self.config: SerialConfig | None = None
         self.init_ui()
+        self.retranslate_ui()
         self.scan_ports()
+
+    def retranslate_ui(self):
+        tr = self.i18n.tr
+        self.setWindowTitle(tr("dialog_port_config", self.slot_name))
+        self.title_label.setText(tr("title_port_config", self.slot_name))
+        self.config_group.setTitle(tr("dialog_port_config_group"))
+        self.port_label.setText(tr("label_port"))
+        self.refresh_btn.setText(tr("btn_refresh"))
+        self.baudrate_label.setText(tr("label_baudrate"))
+        self.databits_label.setText(tr("label_databits"))
+        self.stopbits_label.setText(tr("label_stopbits"))
+        self.parity_label.setText(tr("label_parity_col"))
+        self.flow_label.setText(tr("label_flow_control"))
 
     def init_ui(self):
         """初始化 UI"""
-        self.setWindowTitle(f"配置 {self.slot_name}")
         self.setFixedSize(450, 350)
 
         layout = QVBoxLayout(self)
 
         # 标题
-        title = QLabel(f"🔌 {self.slot_name} 串口配置")
-        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
+        self.title_label = QLabel()
+        self.title_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.title_label)
 
         # 串口配置组
-        config_group = QGroupBox("串口参数")
+        self.config_group = QGroupBox()
         config_layout = QFormLayout()
 
         # 串口选择
         self.port_combo = QComboBox()
         self.port_combo.setMinimumWidth(200)
-        config_layout.addRow("串口:", self.port_combo)
+        self.port_label = QLabel()
+        config_layout.addRow(self.port_label, self.port_combo)
 
         # 刷新按钮
         refresh_layout = QHBoxLayout()
-        self.refresh_btn = QPushButton("🔄 刷新")
+        self.refresh_btn = QPushButton()
         self.refresh_btn.clicked.connect(self.scan_ports)
         refresh_layout.addWidget(self.refresh_btn)
         refresh_layout.addStretch()
@@ -67,30 +83,35 @@ class MultiPortConfigDialog(QDialog):
             ["9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600"]
         )
         self.baudrate_combo.setCurrentText("115200")
-        config_layout.addRow("波特率:", self.baudrate_combo)
+        self.baudrate_label = QLabel()
+        config_layout.addRow(self.baudrate_label, self.baudrate_combo)
 
         # 数据位
         self.databits_combo = QComboBox()
         self.databits_combo.addItems(["8", "7", "6", "5"])
-        config_layout.addRow("数据位:", self.databits_combo)
+        self.databits_label = QLabel()
+        config_layout.addRow(self.databits_label, self.databits_combo)
 
         # 停止位
         self.stopbits_combo = QComboBox()
         self.stopbits_combo.addItems(["1", "1.5", "2"])
-        config_layout.addRow("停止位:", self.stopbits_combo)
+        self.stopbits_label = QLabel()
+        config_layout.addRow(self.stopbits_label, self.stopbits_combo)
 
         # 校验位
         self.parity_combo = QComboBox()
         self.parity_combo.addItems(["None", "Even", "Odd", "Mark", "Space"])
-        config_layout.addRow("校验位:", self.parity_combo)
+        self.parity_label = QLabel()
+        config_layout.addRow(self.parity_label, self.parity_combo)
 
         # 流控
         self.flow_combo = QComboBox()
         self.flow_combo.addItems(["None", "RTS/CTS", "XON/XOFF"])
-        config_layout.addRow("流控:", self.flow_combo)
+        self.flow_label = QLabel()
+        config_layout.addRow(self.flow_label, self.flow_combo)
 
-        config_group.setLayout(config_layout)
-        layout.addWidget(config_group)
+        self.config_group.setLayout(config_layout)
+        layout.addWidget(self.config_group)
 
         # 按钮
         buttons = QDialogButtonBox(
@@ -139,24 +160,43 @@ class MultiPortConfigDialog(QDialog):
 class MultiPortManagerDialog(QDialog):
     """多串口管理器对话框 - 同时配置多个串口"""
 
-    def __init__(self, parent=None, multi_manager=None):
+    def __init__(self, parent=None, multi_manager=None, i18n: I18nManager | None = None):
         super().__init__(parent)
+        self.i18n = i18n or I18nManager()
         self.multi_manager = multi_manager
-        self.setWindowTitle("多串口管理器")
         self.setFixedSize(700, 500)
         self.init_ui()
+        self.retranslate_ui()
+
+    def retranslate_ui(self):
+        tr = self.i18n.tr
+        self.setWindowTitle(tr("dialog_multi_port"))
+        self.title_label.setText(tr("title_multi_port"))
+        self.status_label.setText(tr("status_dot_disconnected"))
+        for button in self.config_buttons:
+            button.setText(tr("btn_configure"))
+        for button in self.connect_buttons:
+            button.setText(tr("btn_connect"))
+        for button in self.compare_buttons:
+            button.setText(tr("btn_compare"))
+        self.connect_all_btn.setText(tr("btn_connect_all"))
+        self.disconnect_all_btn.setText(tr("btn_disconnect_all"))
+        self.close_btn.setText(tr("btn_close"))
 
     def init_ui(self):
         """初始化 UI"""
         layout = QVBoxLayout(self)
 
         # 标题
-        title = QLabel("🔀 多串口管理器 (最多4路)")
-        title.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
+        self.title_label = QLabel()
+        self.title_label.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.title_label)
 
         # 为每个端口创建配置卡片
+        self.config_buttons: list[QPushButton] = []
+        self.connect_buttons: list[QPushButton] = []
+        self.compare_buttons: list[QPushButton] = []
         for slot_name in ["Port A", "Port B", "Port C", "Port D"]:
             card = self._create_port_card(slot_name)
             layout.addWidget(card)
@@ -164,19 +204,19 @@ class MultiPortManagerDialog(QDialog):
         # 按钮
         btn_layout = QHBoxLayout()
 
-        connect_all_btn = QPushButton("🔗 全部连接")
-        connect_all_btn.clicked.connect(self._connect_all)
-        btn_layout.addWidget(connect_all_btn)
+        self.connect_all_btn = QPushButton()
+        self.connect_all_btn.clicked.connect(self._connect_all)
+        btn_layout.addWidget(self.connect_all_btn)
 
-        disconnect_all_btn = QPushButton("⛓️‍💥 全部断开")
-        disconnect_all_btn.clicked.connect(self._disconnect_all)
-        btn_layout.addWidget(disconnect_all_btn)
+        self.disconnect_all_btn = QPushButton()
+        self.disconnect_all_btn.clicked.connect(self._disconnect_all)
+        btn_layout.addWidget(self.disconnect_all_btn)
 
         btn_layout.addStretch()
 
-        close_btn = QPushButton("关闭")
-        close_btn.clicked.connect(self.close)
-        btn_layout.addWidget(close_btn)
+        self.close_btn = QPushButton()
+        self.close_btn.clicked.connect(self.close)
+        btn_layout.addWidget(self.close_btn)
 
         layout.addLayout(btn_layout)
 
@@ -186,17 +226,19 @@ class MultiPortManagerDialog(QDialog):
         layout = QHBoxLayout(card)
 
         # 状态标签
-        self.status_label = QLabel("● 未连接")
+        self.status_label = QLabel()
         self.status_label.setStyleSheet("color: gray;")
         layout.addWidget(self.status_label)
 
         # 配置按钮
-        config_btn = QPushButton("⚙️ 配置")
+        config_btn = QPushButton()
+        self.config_buttons.append(config_btn)
         config_btn.clicked.connect(lambda checked, name=slot_name: self._configure_port(name))
         layout.addWidget(config_btn)
 
         # 连接按钮
-        connect_btn = QPushButton("连接")
+        connect_btn = QPushButton()
+        self.connect_buttons.append(connect_btn)
         connect_btn.setCheckable(True)
         connect_btn.clicked.connect(
             lambda checked, name=slot_name: self._toggle_connection(name, checked)
@@ -204,7 +246,8 @@ class MultiPortManagerDialog(QDialog):
         layout.addWidget(connect_btn)
 
         # 激活对比
-        compare_check = QPushButton("📊 对比")
+        compare_check = QPushButton()
+        self.compare_buttons.append(compare_check)
         compare_check.setCheckable(True)
         compare_check.clicked.connect(
             lambda checked, name=slot_name: self._toggle_compare(name, checked)
@@ -217,7 +260,7 @@ class MultiPortManagerDialog(QDialog):
 
     def _configure_port(self, slot_name: str):
         """配置端口"""
-        dialog = MultiPortConfigDialog(self, slot_name)
+        dialog = MultiPortConfigDialog(self, slot_name, i18n=self.i18n)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             config = dialog.get_config()
             if config and self.multi_manager:
@@ -226,8 +269,10 @@ class MultiPortManagerDialog(QDialog):
                     slot.config = config
                     QMessageBox.information(
                         self,
-                        "成功",
-                        f"{slot_name} 配置已保存\n端口: {config.port}\n波特率: {config.baudrate}",
+                        self.i18n.tr("title_success"),
+                        self.i18n.tr(
+                            "msg_config_saved_detail", slot_name, config.port, config.baudrate
+                        ),
                     )
 
     def _toggle_connection(self, slot_name: str, checked: bool):
@@ -242,13 +287,21 @@ class MultiPortManagerDialog(QDialog):
         if checked:
             # 连接
             if not slot.config:
-                QMessageBox.warning(self, "警告", f'{slot_name} 未配置，请先点击"配置"按钮')
+                QMessageBox.warning(
+                    self,
+                    self.i18n.tr("title_warning"),
+                    self.i18n.tr("msg_not_configured", slot_name),
+                )
                 return
 
             if self.multi_manager.connect(slot_name, slot.config):
                 self._update_status(slot_name, True)
             else:
-                QMessageBox.critical(self, "错误", f"{slot_name} 连接失败")
+                QMessageBox.critical(
+                    self,
+                    self.i18n.tr("title_error"),
+                    self.i18n.tr("msg_port_connected_fail", slot_name),
+                )
         else:
             # 断开
             self.multi_manager.disconnect(slot_name)
@@ -271,7 +324,9 @@ class MultiPortManagerDialog(QDialog):
                     self._update_status(slot_name, True)
                     connected += 1
 
-        QMessageBox.information(self, "完成", f"已连接 {connected} 个串口")
+        QMessageBox.information(
+            self, self.i18n.tr("title_success"), self.i18n.tr("msg_connect_all_done", connected)
+        )
 
     def _disconnect_all(self):
         """断开所有"""

@@ -31,6 +31,8 @@ from PyQt6.QtWidgets import (
 )
 
 from src.core.chart_model import ChannelSpec, ChartSeriesStore, ChartSource, RawDtype
+from src.ui.extended_panels import _retranslate_combo
+from src.ui.i18n import I18nManager
 
 SOURCE_BY_INDEX = {0: ChartSource.RAW, 1: ChartSource.FIELD, 2: ChartSource.REGISTER}
 INDEX_BY_SOURCE = {source: index for index, source in SOURCE_BY_INDEX.items()}
@@ -38,10 +40,10 @@ INDEX_BY_SOURCE = {source: index for index, source in SOURCE_BY_INDEX.items()}
 # 下拉框顺序即枚举声明顺序，映射由枚举派生，避免两处真值走偏
 DTYPE_BY_INDEX = {index: dtype for index, dtype in enumerate(RawDtype)}
 INDEX_BY_DTYPE = {dtype: index for index, dtype in enumerate(RawDtype)}
-DTYPE_LABELS = {
-    RawDtype.UINT8: "字节值 (0-255)",
-    RawDtype.INT16_BE: "整数 int16 (大端有符号)",
-    RawDtype.FLOAT32_BE: "浮点 float32 (大端)",
+DTYPE_KEYS = {
+    RawDtype.UINT8: "dtype_uint8",
+    RawDtype.INT16_BE: "dtype_int16",
+    RawDtype.FLOAT32_BE: "dtype_float32",
 }
 
 
@@ -55,9 +57,10 @@ class ChannelSpecDialog(QDialog):
         field_names=(),
         register_keys=(),
         used_names=(),
+        i18n: I18nManager | None = None,
     ):
         super().__init__(parent)
-        self.setWindowTitle("通道属性")
+        self.i18n = i18n or I18nManager()
         self.used_names = set(used_names) - ({spec.name} if spec else set())
         self.field_names = sorted(field_names)
         self.register_keys = sorted(register_keys, key=lambda k: int(k) if k.isdigit() else 0)
@@ -65,35 +68,42 @@ class ChannelSpecDialog(QDialog):
         self.form = QFormLayout(self)
 
         self.name_edit = QLineEdit(spec.name if spec else "")
-        self.form.addRow("名称", self.name_edit)
+        self.name_label = QLabel()
+        self.form.addRow(self.name_label, self.name_edit)
 
         self.source_combo = QComboBox()
-        self.source_combo.addItems(["原始字节流", "协议字段", "Modbus 寄存器"])
         self.source_combo.currentIndexChanged.connect(self._on_source_changed)
-        self.form.addRow("来源", self.source_combo)
+        self.source_label = QLabel()
+        self.form.addRow(self.source_label, self.source_combo)
 
         self.dtype_combo = QComboBox()
-        self.dtype_combo.addItems([DTYPE_LABELS[dtype] for dtype in RawDtype])
-        self.form.addRow("解码", self.dtype_combo)
+        self.dtype_label = QLabel()
+        self.form.addRow(self.dtype_label, self.dtype_combo)
 
         self.key_combo = QComboBox()
         self.key_combo.setEditable(True)
-        self.form.addRow("字段/地址", self.key_combo)
+        self.key_label = QLabel()
+        self.form.addRow(self.key_label, self.key_combo)
 
         self.unit_edit = QLineEdit(spec.unit if spec else "")
-        self.form.addRow("单位", self.unit_edit)
+        self.unit_label = QLabel()
+        self.form.addRow(self.unit_label, self.unit_edit)
 
         self.scale_spin = QDoubleSpinBox()
         self.scale_spin.setRange(-1e6, 1e6)
         self.scale_spin.setDecimals(6)
         self.scale_spin.setValue(spec.scale if spec else 1.0)
-        self.form.addRow("值 × 缩放", self.scale_spin)
+        self.scale_label = QLabel()
+        self.form.addRow(self.scale_label, self.scale_spin)
 
         self.offset_spin = QDoubleSpinBox()
         self.offset_spin.setRange(-1e9, 1e9)
         self.offset_spin.setDecimals(4)
         self.offset_spin.setValue(spec.offset if spec else 0.0)
-        self.form.addRow("+ 偏移", self.offset_spin)
+        self.offset_label = QLabel()
+        self.form.addRow(self.offset_label, self.offset_spin)
+
+        self.retranslate_ui()
 
         if spec:
             self.source_combo.setCurrentIndex(INDEX_BY_SOURCE[spec.source])
@@ -108,6 +118,19 @@ class ChannelSpecDialog(QDialog):
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
         self.form.addRow(buttons)
+
+    def retranslate_ui(self):
+        tr = self.i18n.tr
+        self.setWindowTitle(tr("dialog_channel_spec"))
+        self.name_label.setText(tr("label_ch_name"))
+        self.source_label.setText(tr("label_ch_source"))
+        _retranslate_combo(self.source_combo, [tr("src_raw"), tr("src_field"), tr("src_register")])
+        self.dtype_label.setText(tr("label_ch_dtype"))
+        _retranslate_combo(self.dtype_combo, [tr(DTYPE_KEYS[d]) for d in RawDtype])
+        self.key_label.setText(tr("label_ch_key"))
+        self.unit_label.setText(tr("label_ch_unit"))
+        self.scale_label.setText(tr("label_ch_scale"))
+        self.offset_label.setText(tr("label_ch_offset"))
 
     def _on_source_changed(self, index: int):
         """不同来源只有各自的取数参数有意义"""
@@ -131,16 +154,22 @@ class ChannelSpecDialog(QDialog):
     def _on_accept(self):
         name = self.name_edit.text().strip()
         if not name:
-            QMessageBox.warning(self, "通道属性", "名称不能为空")
+            QMessageBox.warning(
+                self, self.i18n.tr("dialog_channel_spec"), self.i18n.tr("err_name_empty")
+            )
             return
         if name in self.used_names:
-            QMessageBox.warning(self, "通道属性", f"通道名 {name} 已存在")
+            QMessageBox.warning(
+                self, self.i18n.tr("dialog_channel_spec"), self.i18n.tr("err_name_dup", name)
+            )
             return
         if (
             SOURCE_BY_INDEX[self.source_combo.currentIndex()] != ChartSource.RAW
             and not self.key_combo.currentText().strip()
         ):
-            QMessageBox.warning(self, "通道属性", "请填写字段名或寄存器地址")
+            QMessageBox.warning(
+                self, self.i18n.tr("dialog_channel_spec"), self.i18n.tr("err_key_empty")
+            )
             return
         self.accept()
 
@@ -173,8 +202,11 @@ class EnhancedChart(QWidget):
         "#AED581",
     ]
 
-    def __init__(self, max_points=500, max_channels=8, refresh_ms=60):
+    def __init__(
+        self, max_points=500, max_channels=8, refresh_ms=60, i18n: I18nManager | None = None
+    ):
         super().__init__()
+        self.i18n = i18n or I18nManager()
         self.max_channels = max_channels
         self.store = ChartSeriesStore(max_points=max_points)
         self.frozen = False
@@ -186,6 +218,7 @@ class EnhancedChart(QWidget):
         self._seen_registers: set[str] = set()
 
         self.init_ui()
+        self.retranslate_ui()
 
         # 数据只写缓冲，重绘按固定节拍合并，避免高波特率下每包重绘
         self.refresh_timer = QTimer(self)
@@ -193,27 +226,52 @@ class EnhancedChart(QWidget):
         self.refresh_timer.timeout.connect(self._repaint_if_dirty)
         self.refresh_timer.start()
 
+    def retranslate_ui(self):
+        tr = self.i18n.tr
+        self.mode_label.setText(tr("label_mode"))
+        _retranslate_combo(self.mode_combo, [tr("mode_yt"), tr("mode_xy")])
+        self.axis_label.setText(tr("label_x_axis"))
+        _retranslate_combo(self.axis_combo, [tr("x_axis_index"), tr("x_axis_time")])
+        self.xy_x_label.setText(tr("xy_x_label"))
+        self.xy_y_label.setText(tr("xy_y_label"))
+        self.points_label.setText(tr("label_points"))
+        self.autoscale_check.setText(tr("check_autoscale"))
+        self.grid_check.setText(tr("check_grid"))
+        self.collect_check.setText(tr("check_collect"))
+        self.collect_check.setToolTip(tr("tip_collect"))
+        self.freeze_btn.setText(tr("btn_unfreeze") if self.frozen else tr("btn_freeze"))
+        self.export_btn.setText(tr("btn_export_csv"))
+        self.clear_btn.setText(tr("btn_clear_chart"))
+        self.add_channel_btn.setText(tr("btn_add_channel"))
+        self.channel_bar_label.setText(tr("label_channel"))
+        self._refresh_axis_labels()
+        self._refresh_cursor_hint()
+
+    def _refresh_cursor_hint(self):
+        if not self.store.channels:
+            self.cursor_label.setText(self.i18n.tr("cursor_hint"))
+
     def init_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
         ctrl = QHBoxLayout()
-        ctrl.addWidget(QLabel("模式:"))
+        self.mode_label = QLabel()
+        ctrl.addWidget(self.mode_label)
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["YT (时域)", "XY (李萨如)"])
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         ctrl.addWidget(self.mode_combo)
 
-        ctrl.addWidget(QLabel("  X 轴:"))
+        self.axis_label = QLabel()
+        ctrl.addWidget(self.axis_label)
         self.axis_combo = QComboBox()
-        self.axis_combo.addItems(["采样点", "时间 (s)"])
         self.axis_combo.currentIndexChanged.connect(self._on_axis_changed)
         ctrl.addWidget(self.axis_combo)
 
         self.xy_x_combo = QComboBox()
         self.xy_y_combo = QComboBox()
-        self.xy_x_label = QLabel(" X:")
-        self.xy_y_label = QLabel(" Y:")
+        self.xy_x_label = QLabel()
+        self.xy_y_label = QLabel()
         for combo in (self.xy_x_combo, self.xy_y_combo):
             combo.setVisible(False)
             combo.currentIndexChanged.connect(self._mark_dirty)
@@ -225,7 +283,8 @@ class EnhancedChart(QWidget):
             ctrl.addWidget(label)
             ctrl.addWidget(combo)
 
-        ctrl.addWidget(QLabel("  点数:"))
+        self.points_label = QLabel()
+        ctrl.addWidget(self.points_label)
         self.points_spin = QSpinBox()
         self.points_spin.setRange(50, 5000)
         self.points_spin.setValue(self.store.max_points)
@@ -235,55 +294,53 @@ class EnhancedChart(QWidget):
 
         ctrl.addStretch()
 
-        self.autoscale_check = QCheckBox("自动缩放")
+        self.autoscale_check = QCheckBox()
         self.autoscale_check.setChecked(True)
         self.autoscale_check.stateChanged.connect(self._toggle_autoscale)
         ctrl.addWidget(self.autoscale_check)
 
-        self.grid_check = QCheckBox("网格")
+        self.grid_check = QCheckBox()
         self.grid_check.setChecked(True)
         self.grid_check.stateChanged.connect(self._toggle_grid)
         ctrl.addWidget(self.grid_check)
 
-        self.collect_check = QCheckBox("采集")
+        self.collect_check = QCheckBox()
         self.collect_check.setChecked(True)
-        self.collect_check.setToolTip("关闭后不再采样；冻结只是暂停刷新，仍在采样")
         self.collect_check.toggled.connect(self.set_collect_enabled)
         ctrl.addWidget(self.collect_check)
 
-        self.freeze_btn = QPushButton("⏸ 冻结")
+        self.freeze_btn = QPushButton()
         self.freeze_btn.setCheckable(True)
         self.freeze_btn.toggled.connect(self._on_frozen)
         ctrl.addWidget(self.freeze_btn)
 
-        export_btn = QPushButton("导出 CSV")
-        export_btn.clicked.connect(self._export_via_dialog)
-        ctrl.addWidget(export_btn)
+        self.export_btn = QPushButton()
+        self.export_btn.clicked.connect(self._export_via_dialog)
+        ctrl.addWidget(self.export_btn)
 
-        clear_btn = QPushButton("清空")
-        clear_btn.clicked.connect(self.clear)
-        ctrl.addWidget(clear_btn)
+        self.clear_btn = QPushButton()
+        self.clear_btn.clicked.connect(self.clear)
+        ctrl.addWidget(self.clear_btn)
 
-        add_btn = QPushButton("＋ 通道")
-        add_btn.clicked.connect(self._add_channel_interactive)
-        ctrl.addWidget(add_btn)
+        self.add_channel_btn = QPushButton()
+        self.add_channel_btn.clicked.connect(self._add_channel_interactive)
+        ctrl.addWidget(self.add_channel_btn)
 
         layout.addLayout(ctrl)
 
         self.channel_bar = QHBoxLayout()
-        self.channel_bar.addWidget(QLabel("通道:"))
+        self.channel_bar_label = QLabel()
+        self.channel_bar.addWidget(self.channel_bar_label)
         self.channel_bar.addStretch()
         layout.addLayout(self.channel_bar)
 
-        self.cursor_label = QLabel("光标: 拖动竖线测量 ΔX / ΔY")
+        self.cursor_label = QLabel()
         layout.addWidget(self.cursor_label)
 
         pg.setConfigOptions(antialias=True)
         self.plot_widget = pg.PlotWidget()
         self.plot_widget.setBackground("#1e1e1e")
         self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
-        self.plot_widget.setLabel("left", "数值")
-        self.plot_widget.setLabel("bottom", "采样点")
         self.plot_widget.addLegend()
         layout.addWidget(self.plot_widget)
 
@@ -309,7 +366,7 @@ class EnhancedChart(QWidget):
     def add_channel(self, spec: ChannelSpec) -> str | None:
         """添加通道；返回错误描述，None 表示成功"""
         if len(self.store.channels) >= self.max_channels:
-            return f"最多 {self.max_channels} 个通道"
+            return self.i18n.tr("msg_max_channels", self.max_channels)
         color = self.CHANNEL_COLORS[len(self.store.channels) % len(self.CHANNEL_COLORS)]
         try:
             self.store.add_channel(spec, color=color)
@@ -349,6 +406,7 @@ class EnhancedChart(QWidget):
             field_names=self._seen_fields,
             register_keys=self._seen_registers,
             used_names=self.channel_names(),
+            i18n=self.i18n,
         )
         if not dialog.exec():
             return
@@ -361,18 +419,23 @@ class EnhancedChart(QWidget):
 
     def _add_channel_interactive(self):
         if len(self.store.channels) >= self.max_channels:
-            QMessageBox.information(self, "通道", f"最多 {self.max_channels} 个通道")
+            QMessageBox.information(
+                self,
+                self.i18n.tr("label_channel").rstrip(":"),
+                self.i18n.tr("msg_max_channels", self.max_channels),
+            )
             return
         dialog = ChannelSpecDialog(
             self,
             field_names=self._seen_fields,
             register_keys=self._seen_registers,
             used_names=self.channel_names(),
+            i18n=self.i18n,
         )
         if dialog.exec():
             error = self.add_channel(dialog.spec())
             if error:
-                QMessageBox.warning(self, "通道", error)
+                QMessageBox.warning(self, self.i18n.tr("label_channel").rstrip(":"), error)
 
     def _sync_curves(self):
         """让曲线集合与通道集合保持一致"""
@@ -389,15 +452,15 @@ class EnhancedChart(QWidget):
             curve.setVisible(channel.visible and not self.xy_mode)
 
     def _rebuild_channel_bar(self):
-        while self.channel_bar.count():
-            item = self.channel_bar.takeAt(0)
+        # 索引 0 是常驻的"通道:"标签，其余控件全部重建
+        while self.channel_bar.count() > 1:
+            item = self.channel_bar.takeAt(1)
             if item is None:
                 break
             widget = item.widget()
             if widget:
                 widget.deleteLater()
 
-        self.channel_bar.addWidget(QLabel("通道:"))
         for channel in self.store.channels:
             name = channel.name
             check = QCheckBox(name)
@@ -549,18 +612,24 @@ class EnhancedChart(QWidget):
         for curve in self.curves.values():
             curve.setVisible(not self.xy_mode)
         self.xy_curve.setVisible(self.xy_mode)
-        self.plot_widget.setLabel("left", "Y 通道" if self.xy_mode else "数值")
-        self._update_axis_label()
+        self._refresh_axis_labels()
         self._mark_dirty()
 
     def _on_axis_changed(self, index: int):
         self.x_axis_time = index == 1
-        self._update_axis_label()
+        self._refresh_axis_labels()
         self._mark_dirty()
 
-    def _update_axis_label(self):
+    def _refresh_axis_labels(self):
+        tr = self.i18n.tr
         self.plot_widget.setLabel(
-            "bottom", "X 通道" if self.xy_mode else ("时间 (s)" if self.x_axis_time else "采样点")
+            "left", tr("axis_y_channel") if self.xy_mode else tr("axis_value")
+        )
+        self.plot_widget.setLabel(
+            "bottom",
+            tr("axis_x_channel")
+            if self.xy_mode
+            else (tr("axis_time") if self.x_axis_time else tr("axis_sample")),
         )
 
     def _toggle_channel(self, name: str, state: int):
@@ -596,30 +665,32 @@ class EnhancedChart(QWidget):
 
     def _on_frozen(self, checked: bool):
         self.frozen = checked
-        self.freeze_btn.setText("▶ 继续" if checked else "⏸ 冻结")
+        tr = self.i18n.tr
+        self.freeze_btn.setText(tr("btn_unfreeze") if checked else tr("btn_freeze"))
         if not checked:
             self._mark_dirty()
 
     def _on_cursor_moved(self, *_):
         """读数：两条竖线间的 ΔX 与首个可见通道的 ΔY"""
+        tr = self.i18n.tr
         if self.xy_mode:
             return
         if not self.store.channels:
             return  # 构造期光标初始化，尚无通道，别覆盖提示文案
         channel = next((c for c in self.store.channels if c.visible), None)
         if channel is None or channel.count() == 0:
-            self.cursor_label.setText("光标: 无可见通道")
+            self.cursor_label.setText(tr("cursor_no_channel"))
             return
 
         x_a = self._cursor_x(self.cursor_a)
         x_b = self._cursor_x(self.cursor_b)
-        unit = "ms" if self.x_axis_time else "点"
+        unit = tr("unit_ms") if self.x_axis_time else tr("unit_point")
         scale = 1000.0 if self.x_axis_time else 1.0
         y_a = self._value_at(channel, x_a)
         y_b = self._value_at(channel, x_b)
         suffix = f" {channel.spec.unit}" if channel.spec.unit else ""
         self.cursor_label.setText(
-            f"光标: ΔX={(x_b - x_a) * scale:.3f} {unit}   Δ{channel.name}={y_b - y_a:+.4g}{suffix}"
+            tr("cursor_fmt", (x_b - x_a) * scale, unit, channel.name, y_b - y_a, suffix)
         )
 
     @staticmethod
@@ -651,11 +722,14 @@ class EnhancedChart(QWidget):
         return len(rows)
 
     def _export_via_dialog(self):
-        path, _ = QFileDialog.getSaveFileName(self, "导出曲线数据", "chart.csv", "CSV (*.csv)")
+        tr = self.i18n.tr
+        path, _ = QFileDialog.getSaveFileName(
+            self, tr("dialog_export_csv"), "chart.csv", tr("csv_filter")
+        )
         if not path:
             return
         count = self.export_csv(path)
-        QMessageBox.information(self, "导出曲线数据", f"已写出 {count} 行\n{path}")
+        QMessageBox.information(self, tr("dialog_export_csv"), tr("msg_exported", count, path))
 
     def x_axis_mode(self) -> str:
         return "time" if self.x_axis_time else "index"

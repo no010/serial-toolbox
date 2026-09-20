@@ -30,6 +30,7 @@ class AppConfig:
     auto_scroll: bool = True
     send_newline: bool = True
     theme: str = "dark"  # dark | light
+    language: str = "zh"  # zh | en
 
     # 自动发送
     auto_send_interval: int = 1000

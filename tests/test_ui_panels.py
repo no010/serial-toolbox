@@ -315,3 +315,116 @@ def test_protocol_table_shows_every_field(qapp):
         ("hum", "60"),
     ]
     assert _cell(w.protocol_table, 1, 4) == ""  # 原始数据只在首行显示
+
+
+# ─── i18n ────────────────────────────────────────────────────
+
+
+def test_translation_tables_have_identical_keys():
+    """两张语言表键集合必须一致，否则切语言会漏译/串键"""
+    from src.ui.i18n import TRANSLATIONS, Language
+
+    zh_keys = set(TRANSLATIONS[Language.CHINESE])
+    en_keys = set(TRANSLATIONS[Language.ENGLISH])
+    assert zh_keys == en_keys
+
+
+def test_i18n_tr_fallback_and_formatting():
+    from src.ui.i18n import I18nManager, Language
+
+    i18n = I18nManager()
+    assert i18n.tr("menu_file") == "文件(&F)"
+    assert i18n.tr("no_such_key") == "no_such_key"  # 缺键回退键名本身
+    assert i18n.tr("status_connected", "COM3") == "已连接: COM3"
+
+    i18n.set_language(Language.ENGLISH)
+    assert i18n.tr("menu_file") == "File(&F)"
+    assert i18n.tr("status_connected", "COM3") == "Connected: COM3"
+
+
+def test_i18n_from_value_falls_back_to_chinese():
+    from src.core.config_manager import AppConfig
+    from src.ui.i18n import I18nManager, Language
+
+    assert I18nManager.from_value("en").get_language() == Language.ENGLISH
+    assert I18nManager.from_value("fr").get_language() == Language.CHINESE
+    assert AppConfig().language == "zh"
+
+
+def test_main_window_defaults_to_chinese(qapp):
+    from src.ui.main_window import SerialToolboxMainWindow
+
+    w = SerialToolboxMainWindow()
+    assert w.file_menu is not None and w.settings_menu is not None
+    assert w.windowTitle() == "串口调试助手 - Serial Toolbox v4.0"
+    assert w.file_menu.title() == "文件(&F)"
+    assert w.chart.collect_check.text() == "采集"
+    assert w.script_panel.example_label.text() == "示例脚本:"
+
+
+def test_main_window_english_from_config(qapp, monkeypatch, tmp_path):
+    """配置里写 language=en 时，主窗口与常驻面板整体英文"""
+    import json
+
+    from src.ui.i18n import Language
+    from src.ui.main_window import SerialToolboxMainWindow
+
+    cfg_path = tmp_path / "cfg.json"
+    cfg_path.write_text(json.dumps({"language": "en"}), encoding="utf-8")
+    monkeypatch.setattr("src.core.config_manager.ConfigManager.CONFIG_FILE", str(cfg_path))
+
+    w = SerialToolboxMainWindow()
+    assert w.file_menu is not None and w.settings_menu is not None
+    assert w.windowTitle() == "Serial Toolbox v4.0"
+    assert w.file_menu.title() == "File(&F)"
+    assert w.settings_menu.title() == "Settings(&S)"
+    assert w.serial_group.title() == "Serial Configuration"
+    assert w.receive_tabs.tabText(0) == "📝 Text"
+    assert w.chart.collect_check.text() == "Collect"
+    assert w.modbus_response_panel.auto_detect_label.text().startswith("Auto-detect")
+    assert w.script_panel.run_btn.text().endswith("Run")
+    assert w.compare_panel.clear_all_btn.text() == "Clear All"
+    checked = [lang for lang, a in w._language_actions.items() if a.isChecked()]
+    assert checked == [Language.ENGLISH]
+
+
+def test_language_switch_retranslates_and_persists(qapp, monkeypatch, tmp_path):
+    """回归：i18n 模块曾是死代码，UI 全文硬编码中文且无语言入口"""
+    import json
+
+    from src.ui.i18n import Language
+    from src.ui.main_window import SerialToolboxMainWindow
+
+    w = SerialToolboxMainWindow()
+    monkeypatch.setattr(w.config_mgr, "CONFIG_FILE", str(tmp_path / "cfg.json"))
+
+    w._select_language(Language.ENGLISH)
+    assert w.windowTitle() == "Serial Toolbox v4.0"
+    assert w.connect_btn.text() == "Connect"
+    assert w.send_btn.text() == "Send"
+    assert w.connection_label.text() == "Disconnected"
+    saved = json.load(open(tmp_path / "cfg.json", encoding="utf-8"))
+    assert saved["language"] == "en"
+
+    w._select_language(Language.CHINESE)
+    assert w.connect_btn.text() == "连接"
+    assert w.send_btn.text() == "发送"
+    saved = json.load(open(tmp_path / "cfg.json", encoding="utf-8"))
+    assert saved["language"] == "zh"
+
+
+def test_modbus_panel_func_combo_keeps_selection_on_retranslate(qapp):
+    """切换语言重填下拉框时不能丢当前功能码"""
+    from src.ui.i18n import I18nManager, Language
+    from src.ui.main_window import ModbusPanel
+
+    panel = ModbusPanel()
+    panel.func_combo.setCurrentIndex(3)  # 0x10 写多个
+    panel.retranslate_ui()
+    assert panel.func_combo.currentIndex() == 3
+
+    en = I18nManager(Language.ENGLISH)
+    panel.i18n = en
+    panel.retranslate_ui()
+    assert panel.func_combo.currentIndex() == 3
+    assert "Write Multiple" in panel.func_combo.currentText()
