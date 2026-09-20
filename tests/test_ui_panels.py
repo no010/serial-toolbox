@@ -1,4 +1,5 @@
 """UI 面板测试（offscreen Qt）：覆盖此前导致启动崩溃的 ScriptEditorPanel 重写。"""
+
 import time
 
 import pytest
@@ -83,13 +84,13 @@ def test_script_panel_buttons_drive_engine(qapp, monkeypatch):
     assert calls == ["execute"]
     assert not p.pause_btn.isEnabled(), "空闲态不该能点暂停"
 
-    p.script_state_changed.emit('running')
+    p.script_state_changed.emit("running")
     assert not p.run_btn.isEnabled(), "运行中不该能重复启动"
     p.pause_btn.click()
     p.stop_btn.click()
     assert calls == ["execute", "pause", "stop"]
 
-    p.script_state_changed.emit('breakpoint')
+    p.script_state_changed.emit("breakpoint")
     p.resume_btn.click()
     p.step_btn.click()
     assert calls == ["execute", "pause", "stop", "resume", "step_over"]
@@ -147,7 +148,7 @@ def test_script_panel_pause_resume_through_ui(qapp):
 
     p.pause_btn.click()
     assert _wait_for(lambda: p.resume_btn.isEnabled()), "未停在语句边界"
-    time.sleep(0.7)                        # 越过 sleep(0.5)
+    time.sleep(0.7)  # 越过 sleep(0.5)
     assert "s2" not in p.output_text.toPlainText(), "暂停后脚本仍在往下跑"
 
     p.resume_btn.click()
@@ -171,10 +172,10 @@ def test_main_window_has_no_dead_chart_class(qapp):
 
 
 class _FakeFrame:
-    def __init__(self, fields, raw=b'\x01\x02'):
+    def __init__(self, fields, raw=b"\x01\x02"):
         self.fields = fields
-        self.protocol = 'demo'
-        self.timestamp = '10:00:00'
+        self.protocol = "demo"
+        self.timestamp = "10:00:00"
         self.raw_data = raw
 
 
@@ -196,8 +197,8 @@ def test_main_window_feeds_chart_from_all_sources(qapp, monkeypatch):
     w.chart.add_channel(ChannelSpec(name="bytes", source=ChartSource.RAW))
     w.chart.add_channel(ChannelSpec(name="r0", source=ChartSource.REGISTER, key="0"))
 
-    body = bytes([1, 0x03, 2]) + struct.pack('>H', 500)
-    frame = body + struct.pack('<H', CRC16.calculate(body))
+    body = bytes([1, 0x03, 2]) + struct.pack(">H", 500)
+    frame = body + struct.pack("<H", CRC16.calculate(body))
     w.on_serial_data_received(frame)
 
     raw = w.chart.store.channel("bytes")
@@ -207,11 +208,11 @@ def test_main_window_feeds_chart_from_all_sources(qapp, monkeypatch):
     assert [float(v) for v in register.snapshot()[1]] == [500.0]
 
     seen: list = []
-    monkeypatch.setattr(w.stream_parser, "feed", lambda data: [_FakeFrame({'temp': 21.5})])
+    monkeypatch.setattr(w.stream_parser, "feed", lambda data: [_FakeFrame({"temp": 21.5})])
     monkeypatch.setattr(w.chart, "feed_fields", lambda frames: seen.extend(frames))
 
-    w._parse_protocol_data(b'x')
-    assert [received.fields for received in seen] == [{'temp': 21.5}]
+    w._parse_protocol_data(b"x")
+    assert [received.fields for received in seen] == [{"temp": 21.5}]
 
 
 def test_serial_read_thread_callback_is_marshalled(qapp, monkeypatch):
@@ -234,13 +235,13 @@ def test_serial_read_thread_callback_is_marshalled(qapp, monkeypatch):
     on_data = w.serial_manager.on_data_received
     assert on_data is not None, "setup_connections 未挂上读线程回调"
 
-    worker = threading.Thread(target=lambda: on_data(b'\x01'))
+    worker = threading.Thread(target=lambda: on_data(b"\x01"))
     worker.start()
     worker.join()
 
     assert threads == [], "回调在工作线程里就直接动了控件"
     QCoreApplication.processEvents()
-    assert threads == ['MainThread'], f"回调未编组到主线程: {threads}"
+    assert threads == ["MainThread"], f"回调未编组到主线程: {threads}"
 
 
 def test_protocol_table_shows_every_field(qapp):
@@ -250,9 +251,11 @@ def test_protocol_table_shows_every_field(qapp):
     w = SerialToolboxMainWindow()
     w.protocol_table.setRowCount(0)
 
-    w._add_protocol_frame(_FakeFrame({'temp': 21.5, 'hum': 60}))
+    w._add_protocol_frame(_FakeFrame({"temp": 21.5, "hum": 60}))
 
     assert w.protocol_table.rowCount() == 2
-    assert [(_cell(w.protocol_table, r, 2), _cell(w.protocol_table, r, 3))
-            for r in range(2)] == [('temp', '21.5'), ('hum', '60')]
-    assert _cell(w.protocol_table, 1, 4) == ''      # 原始数据只在首行显示
+    assert [(_cell(w.protocol_table, r, 2), _cell(w.protocol_table, r, 3)) for r in range(2)] == [
+        ("temp", "21.5"),
+        ("hum", "60"),
+    ]
+    assert _cell(w.protocol_table, 1, 4) == ""  # 原始数据只在首行显示

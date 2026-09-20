@@ -9,6 +9,7 @@ from enum import Enum
 
 class ThemeMode(Enum):
     """主题模式"""
+
     LIGHT = "light"
     DARK = "dark"
 
@@ -16,6 +17,7 @@ class ThemeMode(Enum):
 @dataclass
 class ThemeColors:
     """主题颜色"""
+
     # 背景色
     background: str
     surface: str

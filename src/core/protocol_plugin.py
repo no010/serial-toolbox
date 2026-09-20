@@ -15,16 +15,17 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ParsedFrame:
     """解析后的帧"""
+
     protocol: str  # 协议名称
     timestamp: str = ""
-    raw_data: bytes = b''
+    raw_data: bytes = b""
     fields: dict[str, Any] = field(default_factory=dict)
     is_valid: bool = True
     error_msg: str = ""
 
     def __post_init__(self):
         if not self.timestamp:
-            self.timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+            self.timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
 
     def get_field(self, name: str, default=None):
         """获取字段值"""
@@ -33,12 +34,12 @@ class ParsedFrame:
     def to_dict(self) -> dict:
         """转换为字典"""
         return {
-            'protocol': self.protocol,
-            'timestamp': self.timestamp,
-            'raw_hex': ' '.join(f'{b:02X}' for b in self.raw_data),
-            'fields': self.fields,
-            'is_valid': self.is_valid,
-            'error_msg': self.error_msg,
+            "protocol": self.protocol,
+            "timestamp": self.timestamp,
+            "raw_hex": " ".join(f"{b:02X}" for b in self.raw_data),
+            "fields": self.fields,
+            "is_valid": self.is_valid,
+            "error_msg": self.error_msg,
         }
 
 
@@ -109,6 +110,7 @@ class ProtocolRegistry:
         """注册自定义模板协议"""
         try:
             from src.protocols.template_parser import ProtocolTemplateManager
+
             self.template_manager = ProtocolTemplateManager()
             for parser in self.template_manager.create_all_parsers():
                 self.register(parser)
@@ -142,6 +144,7 @@ class ProtocolRegistry:
 
 
 # ─── 协议流解析器 ────────────────────────────────────────────
+
 
 class StreamProtocolParser:
     """流式协议解析器 - 从字节流中自动识别并解析帧"""

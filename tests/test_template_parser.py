@@ -1,4 +1,5 @@
 """template_parser 核心逻辑测试：CRC、帧检测/解析往返、模板存取安全。"""
+
 import os
 
 import pytest
@@ -15,6 +16,7 @@ from src.protocols.template_parser import (
 
 # ── CRC 已知向量 ────────────────────────────────────────────
 
+
 def test_crc16_modbus_known_vector():
     # 标准校验输入 "123456789" 的 Modbus CRC16 = 0x4B37
     assert calculate_crc16_modbus(b"123456789") == 0x4B37
@@ -26,6 +28,7 @@ def test_crc16_xmodem_known_vector():
 
 
 # ── 帧检测 / 解析往返 ───────────────────────────────────────
+
 
 def test_sample_round_trip():
     p = TemplateProtocolParser(create_sample_template())
@@ -68,6 +71,7 @@ def test_length_field_parse_regression():
 
 # ── from_dict 健壮性 ────────────────────────────────────────
 
+
 def test_template_field_type_inferred_from_size():
     f = TemplateField.from_dict({"name": "x", "offset": 2, "size": 2, "bogus": 1})
     assert f.type == "uint16"  # size=2 → uint16，且忽略多余键
@@ -79,6 +83,7 @@ def test_protocol_template_ignores_extra_keys():
 
 
 # ── 模板存取安全 ────────────────────────────────────────────
+
 
 @pytest.mark.parametrize("bad", ["../evil", "a/b", "..\\x", "COM1", "  "])
 def test_save_rejects_illegal_name(tmp_path, bad):

@@ -1,4 +1,5 @@
 """协议解析器插件"""
+
 from .can_parser import CANParser
 from .dmx512_parser import DMX512Parser
 from .i2c_parser import I2CParser

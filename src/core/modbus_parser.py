@@ -11,6 +11,7 @@ from datetime import datetime
 @dataclass
 class RegisterValue:
     """寄存器值"""
+
     address: int
     raw_value: int  # 16位原始值
     signed_value: int  # 有符号值
@@ -19,24 +20,25 @@ class RegisterValue:
 
     def __post_init__(self):
         if not self.timestamp:
-            self.timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+            self.timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
 
 
 @dataclass
 class ModbusResponse:
     """Modbus 响应解析结果"""
+
     slave_addr: int
     function_code: int
     is_error: bool
     error_code: int | None = None
     error_msg: str = ""
     registers: list[RegisterValue] = field(default_factory=list)
-    raw_frame: bytes = b''
+    raw_frame: bytes = b""
     timestamp: str = ""
 
     def __post_init__(self):
         if not self.timestamp:
-            self.timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+            self.timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
 
 
 class ModbusResponseParser:
@@ -92,10 +94,11 @@ class ModbusResponseParser:
             if len(self.buffer) < 5:
                 return None
             error_code = self.buffer[2]
-            crc = struct.unpack('<H', bytes(self.buffer[3:5]))[0]
+            crc = struct.unpack("<H", bytes(self.buffer[3:5]))[0]
 
             # 校验 CRC
             from src.core.protocol_parser import CRC16
+
             calc_crc = CRC16.calculate(bytes(self.buffer[:3]))
             if crc != calc_crc:
                 # CRC 错误，丢弃第一个字节，继续尝试
@@ -112,7 +115,7 @@ class ModbusResponseParser:
                 is_error=True,
                 error_code=error_code,
                 error_msg=self.ERROR_CODES.get(error_code, f"未知错误: {error_code}"),
-                raw_frame=frame
+                raw_frame=frame,
             )
 
         # 正常响应
@@ -126,12 +129,13 @@ class ModbusResponseParser:
                 return None
 
             # 提取数据
-            reg_data = bytes(self.buffer[3:3+byte_count])
-            crc = struct.unpack('<H', bytes(self.buffer[3+byte_count:3+byte_count+2]))[0]
+            reg_data = bytes(self.buffer[3 : 3 + byte_count])
+            crc = struct.unpack("<H", bytes(self.buffer[3 + byte_count : 3 + byte_count + 2]))[0]
 
             # 校验 CRC
             from src.core.protocol_parser import CRC16
-            calc_crc = CRC16.calculate(bytes(self.buffer[:3+byte_count]))
+
+            calc_crc = CRC16.calculate(bytes(self.buffer[: 3 + byte_count]))
             if crc != calc_crc:
                 self.buffer.pop(0)
                 return None
@@ -147,7 +151,7 @@ class ModbusResponseParser:
                 function_code=func_code,
                 is_error=False,
                 registers=registers,
-                raw_frame=frame
+                raw_frame=frame,
             )
 
         elif func_code in [0x05, 0x06, 0x0F, 0x10]:  # 写响应
@@ -156,9 +160,10 @@ class ModbusResponseParser:
 
             # 写响应固定 8 字节
             frame = bytes(self.buffer[:8])
-            crc = struct.unpack('<H', bytes(self.buffer[6:8]))[0]
+            crc = struct.unpack("<H", bytes(self.buffer[6:8]))[0]
 
             from src.core.protocol_parser import CRC16
+
             calc_crc = CRC16.calculate(bytes(self.buffer[:6]))
             if crc != calc_crc:
                 self.buffer.pop(0)
@@ -167,10 +172,7 @@ class ModbusResponseParser:
             del self.buffer[:8]
 
             return ModbusResponse(
-                slave_addr=slave_addr,
-                function_code=func_code,
-                is_error=False,
-                raw_frame=frame
+                slave_addr=slave_addr, function_code=func_code, is_error=False, raw_frame=frame
             )
 
         else:
@@ -185,20 +187,16 @@ class ModbusResponseParser:
 
         for i in range(0, len(data), 2):
             if i + 1 < len(data):
-                raw = struct.unpack('>H', data[i:i+2])[0]
-                signed = struct.unpack('>h', data[i:i+2])[0]
+                raw = struct.unpack(">H", data[i : i + 2])[0]
+                signed = struct.unpack(">h", data[i : i + 2])[0]
 
-                reg = RegisterValue(
-                    address=start_addr + i // 2,
-                    raw_value=raw,
-                    signed_value=signed
-                )
+                reg = RegisterValue(address=start_addr + i // 2, raw_value=raw, signed_value=signed)
                 registers.append(reg)
 
         # 计算浮点值 (每2个寄存器组成一个32位浮点)
         for i in range(0, len(registers) - 1, 2):
-            raw_bytes = struct.pack('>HH', registers[i].raw_value, registers[i+1].raw_value)
-            float_val = struct.unpack('>f', raw_bytes)[0]
+            raw_bytes = struct.pack(">HH", registers[i].raw_value, registers[i + 1].raw_value)
+            float_val = struct.unpack(">f", raw_bytes)[0]
             registers[i].float_value = float_val
 
         return registers

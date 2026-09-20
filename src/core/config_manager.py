@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AppConfig:
     """应用配置"""
+
     # 串口默认配置
     last_port: str = ""
     baudrate: int = 115200
@@ -33,10 +34,12 @@ class AppConfig:
     auto_send_interval: int = 1000
 
     # 预设指令列表 [{name, data, is_hex}]
-    presets: list = field(default_factory=lambda: [
-        {"name": "AT 测试", "data": "AT\r\n", "is_hex": False},
-        {"name": "Modbus 读寄存器", "data": "01 03 00 00 00 01", "is_hex": True},
-    ])
+    presets: list = field(
+        default_factory=lambda: [
+            {"name": "AT 测试", "data": "AT\r\n", "is_hex": False},
+            {"name": "Modbus 读寄存器", "data": "01 03 00 00 00 01", "is_hex": True},
+        ]
+    )
 
     # 窗口几何
     window_x: int = 100
@@ -46,8 +49,8 @@ class AppConfig:
 
     # 波形图配置
     chart_max_points: int = 500
-    chart_collect: bool = True           # 关掉后不再向图表缓冲写数据，也不重绘
-    chart_x_axis: str = "index"          # index | time
+    chart_collect: bool = True  # 关掉后不再向图表缓冲写数据，也不重绘
+    chart_x_axis: str = "index"  # index | time
     chart_channels: list = field(default_factory=list)  # [ChannelSpec.to_dict()]
 
 
@@ -69,7 +72,7 @@ class ConfigManager:
         """加载配置"""
         try:
             if os.path.exists(self.CONFIG_FILE):
-                with open(self.CONFIG_FILE, encoding='utf-8') as f:
+                with open(self.CONFIG_FILE, encoding="utf-8") as f:
                     data = json.load(f)
                 # 用加载的数据更新默认配置（保留新增字段的默认值）
                 for key, value in data.items():
@@ -84,7 +87,7 @@ class ConfigManager:
         if config:
             self.config = config
         try:
-            with open(self.CONFIG_FILE, 'w', encoding='utf-8') as f:
+            with open(self.CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump(asdict(self.config), f, ensure_ascii=False, indent=2)
         except Exception:
             logger.exception("保存配置失败")

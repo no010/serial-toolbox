@@ -56,27 +56,18 @@ class I2CParser(ProtocolParserBase):
         """解析 I2C 帧"""
         if len(data) < 5:
             return ParsedFrame(
-                protocol=self.name,
-                raw_data=data,
-                is_valid=False,
-                error_msg="帧太短"
+                protocol=self.name, raw_data=data, is_valid=False, error_msg="帧太短"
             )
 
         # 检查帧头帧尾
         if data[0] != self.FRAME_HEADER:
             return ParsedFrame(
-                protocol=self.name,
-                raw_data=data,
-                is_valid=False,
-                error_msg="帧头错误"
+                protocol=self.name, raw_data=data, is_valid=False, error_msg="帧头错误"
             )
 
         if data[-1] != self.FRAME_TAIL:
             return ParsedFrame(
-                protocol=self.name,
-                raw_data=data,
-                is_valid=False,
-                error_msg="帧尾错误"
+                protocol=self.name, raw_data=data, is_valid=False, error_msg="帧尾错误"
             )
 
         # 解析字段
@@ -84,33 +75,33 @@ class I2CParser(ProtocolParserBase):
         rw_flag = data[2]
         length = data[3]
 
-        is_read = (rw_flag == self.FLAG_READ)
+        is_read = rw_flag == self.FLAG_READ
 
         # 解析数据
         data_offset = 4
-        payload = data[data_offset:data_offset+length]
+        payload = data[data_offset : data_offset + length]
 
         # CRC 校验
         received_crc = data[data_offset + length]
-        calculated_crc = self._calculate_crc(data[1:data_offset+length])
+        calculated_crc = self._calculate_crc(data[1 : data_offset + length])
 
-        crc_valid = (received_crc == calculated_crc)
+        crc_valid = received_crc == calculated_crc
 
         return ParsedFrame(
             protocol=self.name,
             raw_data=data,
             fields={
-                'address': f"0x{addr:02X}",
-                'address_decimal': addr,
-                'operation': 'READ' if is_read else 'WRITE',
-                'length': length,
-                'data': ' '.join(f'{b:02X}' for b in payload),
-                'data_bytes': list(payload),
-                'crc_valid': crc_valid,
-                'crc_received': f"0x{received_crc:02X}",
-                'crc_calculated': f"0x{calculated_crc:02X}",
+                "address": f"0x{addr:02X}",
+                "address_decimal": addr,
+                "operation": "READ" if is_read else "WRITE",
+                "length": length,
+                "data": " ".join(f"{b:02X}" for b in payload),
+                "data_bytes": list(payload),
+                "crc_valid": crc_valid,
+                "crc_received": f"0x{received_crc:02X}",
+                "crc_calculated": f"0x{calculated_crc:02X}",
             },
-            is_valid=crc_valid
+            is_valid=crc_valid,
         )
 
     def build_frame(self, address: int, data: bytes, read: bool = False) -> bytes:  # type: ignore
@@ -149,13 +140,13 @@ class I2CParser(ProtocolParserBase):
     def get_fields_description(self) -> dict:
         """获取字段说明"""
         return {
-            'address': 'I2C 设备地址 (7位, 十六进制)',
-            'address_decimal': 'I2C 设备地址 (十进制)',
-            'operation': '操作类型 (READ/WRITE)',
-            'length': '数据长度',
-            'data': '数据内容 (十六进制)',
-            'data_bytes': '数据内容 (字节列表)',
-            'crc_valid': 'CRC 校验是否通过',
-            'crc_received': '接收到的 CRC',
-            'crc_calculated': '计算出的 CRC',
+            "address": "I2C 设备地址 (7位, 十六进制)",
+            "address_decimal": "I2C 设备地址 (十进制)",
+            "operation": "操作类型 (READ/WRITE)",
+            "length": "数据长度",
+            "data": "数据内容 (十六进制)",
+            "data_bytes": "数据内容 (字节列表)",
+            "crc_valid": "CRC 校验是否通过",
+            "crc_received": "接收到的 CRC",
+            "crc_calculated": "计算出的 CRC",
         }

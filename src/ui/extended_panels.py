@@ -44,11 +44,12 @@ from src.protocols.template_parser import (
 
 # ─── Modbus 响应解析面板 ─────────────────────────────────────
 
+
 class ModbusResponsePanel(QGroupBox):
     """Modbus 响应解析结果面板"""
 
     def __init__(self):
-        super().__init__('Modbus 响应解析')
+        super().__init__("Modbus 响应解析")
         self.parser = ModbusResponseParser()
         self.init_ui()
 
@@ -57,10 +58,10 @@ class ModbusResponsePanel(QGroupBox):
 
         # 控制栏
         ctrl = QHBoxLayout()
-        ctrl.addWidget(QLabel('自动检测 Modbus 帧并解析寄存器值'))
+        ctrl.addWidget(QLabel("自动检测 Modbus 帧并解析寄存器值"))
         ctrl.addStretch()
 
-        clear_btn = QPushButton('清空')
+        clear_btn = QPushButton("清空")
         clear_btn.clicked.connect(self.clear)
         ctrl.addWidget(clear_btn)
 
@@ -69,9 +70,9 @@ class ModbusResponsePanel(QGroupBox):
         # 响应历史表格
         self.response_table = QTableWidget()
         self.response_table.setColumnCount(6)
-        self.response_table.setHorizontalHeaderLabels([
-            '时间', '从机', '功能码', '寄存器地址', '原始值', '有符号值'
-        ])
+        self.response_table.setHorizontalHeaderLabels(
+            ["时间", "从机", "功能码", "寄存器地址", "原始值", "有符号值"]
+        )
         response_header = self.response_table.horizontalHeader()
         assert response_header is not None
         response_header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -81,14 +82,14 @@ class ModbusResponsePanel(QGroupBox):
         # 寄存器值详情
         self.register_table = QTableWidget()
         self.register_table.setColumnCount(4)
-        self.register_table.setHorizontalHeaderLabels([
-            '地址', 'HEX', 'DEC (有符号)', 'Float (IEEE754)'
-        ])
+        self.register_table.setHorizontalHeaderLabels(
+            ["地址", "HEX", "DEC (有符号)", "Float (IEEE754)"]
+        )
         register_header = self.register_table.horizontalHeader()
         assert register_header is not None
         register_header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.register_table.setMaximumHeight(150)
-        layout.addWidget(QLabel('寄存器详情:'))
+        layout.addWidget(QLabel("寄存器详情:"))
         layout.addWidget(self.register_table)
 
     def feed_data(self, data: bytes) -> list[ModbusResponse]:
@@ -111,7 +112,9 @@ class ModbusResponsePanel(QGroupBox):
 
         # 功能码
         func_name = self._get_func_name(resp.function_code)
-        self.response_table.setItem(row, 2, QTableWidgetItem(f"0x{resp.function_code:02X} {func_name}"))
+        self.response_table.setItem(
+            row, 2, QTableWidgetItem(f"0x{resp.function_code:02X} {func_name}")
+        )
 
         if resp.is_error:
             # 错误响应
@@ -123,7 +126,9 @@ class ModbusResponsePanel(QGroupBox):
             if resp.registers:
                 first_reg = resp.registers[0]
                 self.response_table.setItem(row, 3, QTableWidgetItem(f"0x{first_reg.address:04X}"))
-                self.response_table.setItem(row, 4, QTableWidgetItem(f"0x{first_reg.raw_value:04X}"))
+                self.response_table.setItem(
+                    row, 4, QTableWidgetItem(f"0x{first_reg.raw_value:04X}")
+                )
                 self.response_table.setItem(row, 5, QTableWidgetItem(str(first_reg.signed_value)))
 
                 # 更新寄存器详情表
@@ -168,6 +173,7 @@ class ModbusResponsePanel(QGroupBox):
 
 # ─── 日志设置对话框 ──────────────────────────────────────────
 
+
 class LogSettingsDialog(QDialog):
     """日志设置对话框"""
 
@@ -197,12 +203,7 @@ class LogSettingsDialog(QDialog):
 
         # 轮转模式
         self.mode_combo = QComboBox()
-        self.mode_combo.addItems([
-            "不轮转",
-            "按大小",
-            "按时间",
-            "按天"
-        ])
+        self.mode_combo.addItems(["不轮转", "按大小", "按时间", "按天"])
         layout.addRow("轮转模式:", self.mode_combo)
 
         # 最大大小 (MB)
@@ -276,6 +277,7 @@ class LogSettingsDialog(QDialog):
 
 # ─── 脚本编辑器面板 ─────────────────────────────────────────
 
+
 class ScriptEditorPanel(QGroupBox):
     """Python 脚本编辑器面板"""
 
@@ -285,17 +287,17 @@ class ScriptEditorPanel(QGroupBox):
     script_state_changed = pyqtSignal(str)
 
     _STATE_LABELS = {
-        'idle': '空闲',
-        'running': '运行中',
-        'paused': '已暂停',
-        'stopped': '已结束',
-        'error': '出错',
-        'breakpoint': '断点暂停',
+        "idle": "空闲",
+        "running": "运行中",
+        "paused": "已暂停",
+        "stopped": "已结束",
+        "error": "出错",
+        "breakpoint": "断点暂停",
     }
-    _RUNNING_STATES = ('running', 'paused', 'breakpoint')
+    _RUNNING_STATES = ("running", "paused", "breakpoint")
 
     def __init__(self, serial_manager=None):
-        super().__init__('Python 脚本引擎')
+        super().__init__("Python 脚本引擎")
         self.serial_manager = serial_manager
         self.engine = ScriptEngine(serial_manager) if serial_manager else None
         if self.engine:
@@ -311,33 +313,33 @@ class ScriptEditorPanel(QGroupBox):
 
         # 示例选择
         ctrl = QHBoxLayout()
-        ctrl.addWidget(QLabel('示例脚本:'))
+        ctrl.addWidget(QLabel("示例脚本:"))
         self.example_combo = QComboBox()
         self.example_combo.addItems(list(EXAMPLE_SCRIPTS.keys()))
         self.example_combo.currentTextChanged.connect(self._load_example)
         ctrl.addWidget(self.example_combo)
 
-        self.run_btn = QPushButton('▶️ 运行')
+        self.run_btn = QPushButton("▶️ 运行")
         self.run_btn.clicked.connect(self._run_script)
         ctrl.addWidget(self.run_btn)
 
-        self.pause_btn = QPushButton('⏸ 暂停')
+        self.pause_btn = QPushButton("⏸ 暂停")
         self.pause_btn.clicked.connect(self._pause_script)
         ctrl.addWidget(self.pause_btn)
 
-        self.resume_btn = QPushButton('▶ 恢复')
+        self.resume_btn = QPushButton("▶ 恢复")
         self.resume_btn.clicked.connect(self._resume_script)
         ctrl.addWidget(self.resume_btn)
 
-        self.step_btn = QPushButton('⏭ 单步')
+        self.step_btn = QPushButton("⏭ 单步")
         self.step_btn.clicked.connect(self._step_script)
         ctrl.addWidget(self.step_btn)
 
-        self.stop_btn = QPushButton('⏹ 停止')
+        self.stop_btn = QPushButton("⏹ 停止")
         self.stop_btn.clicked.connect(self._stop_script)
         ctrl.addWidget(self.stop_btn)
 
-        clear_btn = QPushButton('清空输出')
+        clear_btn = QPushButton("清空输出")
         clear_btn.clicked.connect(self._clear_output)
         ctrl.addWidget(clear_btn)
 
@@ -346,19 +348,19 @@ class ScriptEditorPanel(QGroupBox):
 
         # 代码编辑区
         self.code_edit = QPlainTextEdit()
-        self.code_edit.setFont(QFont('Consolas', 10))
+        self.code_edit.setFont(QFont("Consolas", 10))
         layout.addWidget(self.code_edit)
 
         # 输出区
         head = QHBoxLayout()
-        head.addWidget(QLabel('输出:'))
+        head.addWidget(QLabel("输出:"))
         self.state_label = QLabel()
         head.addWidget(self.state_label)
         head.addStretch()
         layout.addLayout(head)
         self.output_text = QTextEdit()
         self.output_text.setReadOnly(True)
-        self.output_text.setFont(QFont('Consolas', 9))
+        self.output_text.setFont(QFont("Consolas", 9))
         self.output_text.setMaximumHeight(150)
         layout.addWidget(self.output_text)
 
@@ -367,7 +369,7 @@ class ScriptEditorPanel(QGroupBox):
 
         # 加载下拉框当前选中的示例（此前写死了一个不存在的示例名，代码区一直是空的）
         self._load_example(self.example_combo.currentText())
-        self._update_controls('idle')
+        self._update_controls("idle")
 
     def _load_example(self, name: str):
         """加载示例脚本"""
@@ -407,12 +409,12 @@ class ScriptEditorPanel(QGroupBox):
 
     def _update_controls(self, state: str):
         """按引擎状态切换按钮可用性，避免运行结束后按钮失真"""
-        self.state_label.setText(f'状态: {self._STATE_LABELS.get(state, state)}')
+        self.state_label.setText(f"状态: {self._STATE_LABELS.get(state, state)}")
         running = state in self._RUNNING_STATES
         self.run_btn.setEnabled(self.engine is not None and not running)
-        self.pause_btn.setEnabled(state == 'running')
-        self.resume_btn.setEnabled(state in ('paused', 'breakpoint'))
-        self.step_btn.setEnabled(state in ('paused', 'breakpoint'))
+        self.pause_btn.setEnabled(state == "running")
+        self.resume_btn.setEnabled(state in ("paused", "breakpoint"))
+        self.step_btn.setEnabled(state in ("paused", "breakpoint"))
         self.stop_btn.setEnabled(running)
 
     def _on_engine_finished(self, success: bool, msg: str):
@@ -431,11 +433,12 @@ class ScriptEditorPanel(QGroupBox):
 
 # ─── 多串口对比面板 ─────────────────────────────────────────
 
+
 class MultiSerialComparePanel(QGroupBox):
     """多串口对比面板"""
 
     def __init__(self, manager):
-        super().__init__('多串口对比')
+        super().__init__("多串口对比")
         self.multi_manager = manager
         self.text_areas = {}
         self.init_ui()
@@ -445,13 +448,13 @@ class MultiSerialComparePanel(QGroupBox):
 
         # 控制栏
         ctrl = QHBoxLayout()
-        for name in ['Port A', 'Port B', 'Port C', 'Port D']:
+        for name in ["Port A", "Port B", "Port C", "Port D"]:
             slot_widget = self._create_slot_widget(name)
             ctrl.addWidget(slot_widget)
 
         ctrl.addStretch()
 
-        clear_btn = QPushButton('清空全部')
+        clear_btn = QPushButton("清空全部")
         clear_btn.clicked.connect(self.clear_all)
         ctrl.addWidget(clear_btn)
 
@@ -461,17 +464,17 @@ class MultiSerialComparePanel(QGroupBox):
         grid_layout = QVBoxLayout()
 
         row1 = QHBoxLayout()
-        self.text_areas['Port A'] = self._create_text_area('Port A')
-        self.text_areas['Port B'] = self._create_text_area('Port B')
-        row1.addWidget(self.text_areas['Port A'])
-        row1.addWidget(self.text_areas['Port B'])
+        self.text_areas["Port A"] = self._create_text_area("Port A")
+        self.text_areas["Port B"] = self._create_text_area("Port B")
+        row1.addWidget(self.text_areas["Port A"])
+        row1.addWidget(self.text_areas["Port B"])
         grid_layout.addLayout(row1)
 
         row2 = QHBoxLayout()
-        self.text_areas['Port C'] = self._create_text_area('Port C')
-        self.text_areas['Port D'] = self._create_text_area('Port D')
-        row2.addWidget(self.text_areas['Port C'])
-        row2.addWidget(self.text_areas['Port D'])
+        self.text_areas["Port C"] = self._create_text_area("Port C")
+        self.text_areas["Port D"] = self._create_text_area("Port D")
+        row2.addWidget(self.text_areas["Port C"])
+        row2.addWidget(self.text_areas["Port D"])
         grid_layout.addLayout(row2)
 
         layout.addLayout(grid_layout)
@@ -486,7 +489,7 @@ class MultiSerialComparePanel(QGroupBox):
         check.stateChanged.connect(lambda state, n=name: self._on_slot_toggled(n, state))
         layout.addWidget(check)
 
-        connect_btn = QPushButton('连接')
+        connect_btn = QPushButton("连接")
         connect_btn.clicked.connect(lambda checked, n=name: self._connect_slot(n))
         layout.addWidget(connect_btn)
 
@@ -496,8 +499,8 @@ class MultiSerialComparePanel(QGroupBox):
         """创建文本显示区域"""
         text = QTextEdit()
         text.setReadOnly(True)
-        text.setFont(QFont('Consolas', 9))
-        text.setPlaceholderText(f'{name} - 未连接')
+        text.setFont(QFont("Consolas", 9))
+        text.setPlaceholderText(f"{name} - 未连接")
         text.setMaximumHeight(150)
         return text
 
@@ -510,9 +513,7 @@ class MultiSerialComparePanel(QGroupBox):
         """连接槽位 (简化版，实际需要弹出配置对话框)"""
         # 这里简化处理，实际应该弹出配置对话框
         QMessageBox.information(
-            self, '提示',
-            f'请在主界面配置 {name} 的串口参数\n'
-            '多串口完整配置功能开发中...'
+            self, "提示", f"请在主界面配置 {name} 的串口参数\n多串口完整配置功能开发中..."
         )
 
     def append_data(self, slot_name: str, data: bytes, hex_mode: bool = False):
@@ -520,9 +521,9 @@ class MultiSerialComparePanel(QGroupBox):
         if slot_name in self.text_areas:
             text_area = self.text_areas[slot_name]
             if hex_mode:
-                text = ' '.join(f'{b:02X}' for b in data)
+                text = " ".join(f"{b:02X}" for b in data)
             else:
-                text = data.decode('utf-8', errors='replace')
+                text = data.decode("utf-8", errors="replace")
             text_area.append(text)
 
     def clear_all(self):
@@ -533,6 +534,7 @@ class MultiSerialComparePanel(QGroupBox):
 
 # ─── 协议模板管理对话框 ─────────────────────────────────────
 
+
 class ProtocolTemplateDialog(QDialog):
     """自定义协议模板管理对话框"""
 
@@ -540,7 +542,9 @@ class ProtocolTemplateDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("协议模板管理")
         self.setFixedSize(800, 600)
-        self.template_manager: ProtocolTemplateManager = template_manager or ProtocolTemplateManager()
+        self.template_manager: ProtocolTemplateManager = (
+            template_manager or ProtocolTemplateManager()
+        )
         self.init_ui()
         self.refresh_template_list()
 
@@ -586,13 +590,13 @@ class ProtocolTemplateDialog(QDialog):
         right_layout.addWidget(QLabel("模板 JSON:"))
 
         self.json_edit = QPlainTextEdit()
-        self.json_edit.setFont(QFont('Consolas', 10))
+        self.json_edit.setFont(QFont("Consolas", 10))
         right_layout.addWidget(self.json_edit)
 
         # 预览区
         right_layout.addWidget(QLabel("预览:"))
         self.preview_text = QTextBrowser()
-        self.preview_text.setFont(QFont('Consolas', 9))
+        self.preview_text.setFont(QFont("Consolas", 9))
         self.preview_text.setMaximumHeight(120)
         right_layout.addWidget(self.preview_text)
 
@@ -625,7 +629,9 @@ class ProtocolTemplateDialog(QDialog):
         name = current.text()
         template = self.template_manager.get_template(name)
         if template:
-            self.json_edit.setPlainText(json.dumps(template.to_dict(), ensure_ascii=False, indent=2))
+            self.json_edit.setPlainText(
+                json.dumps(template.to_dict(), ensure_ascii=False, indent=2)
+            )
             self._update_preview(template)
 
     def _create_new_template(self):
@@ -648,9 +654,10 @@ class ProtocolTemplateDialog(QDialog):
             return
         name = current.text()
         reply = QMessageBox.question(
-            self, '确认删除',
+            self,
+            "确认删除",
             f'确定删除模板 "{name}" 吗？',
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
             self.template_manager.delete_template(name)
@@ -665,9 +672,9 @@ class ProtocolTemplateDialog(QDialog):
                 raise ValueError("模板名称不能为空")
             self.template_manager.save_template(template)
             self.refresh_template_list()
-            QMessageBox.information(self, '保存成功', f'模板 "{template.name}" 已保存')
+            QMessageBox.information(self, "保存成功", f'模板 "{template.name}" 已保存')
         except Exception as e:
-            QMessageBox.critical(self, '保存失败', f'JSON 格式错误: {str(e)}')
+            QMessageBox.critical(self, "保存失败", f"JSON 格式错误: {str(e)}")
 
     def _update_preview(self, template: ProtocolTemplate):
         """更新预览信息"""
@@ -690,4 +697,4 @@ class ProtocolTemplateDialog(QDialog):
         else:
             preview.append("  (无字段定义)")
 
-        self.preview_text.setPlainText('\n'.join(preview))
+        self.preview_text.setPlainText("\n".join(preview))

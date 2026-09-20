@@ -4,6 +4,7 @@
 各模块使用标准库 ``logging.getLogger(__name__)`` 记录日志；
 应用在入口处调用 :func:`setup_logging` 一次性配置根 logger。
 """
+
 import logging
 import os
 import sys

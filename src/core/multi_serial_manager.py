@@ -12,6 +12,7 @@ from src.core.serial_manager import SerialConfig, SerialManager
 @dataclass
 class PortSlot:
     """串口槽位"""
+
     name: str  # 槽位名称 (如 "Port A", "Port B")
     manager: SerialManager
     config: SerialConfig | None = None
@@ -48,7 +49,9 @@ class MultiSerialManager:
         # 设置回调
         slot.manager.on_data_received = lambda data, sn=slot_name: self._on_data(sn, data)
         slot.manager.on_error = lambda err, sn=slot_name: self._on_error(sn, err)
-        slot.manager.on_connection_changed = lambda conn, sn=slot_name: self._on_connection(sn, conn)
+        slot.manager.on_connection_changed = lambda conn, sn=slot_name: self._on_connection(
+            sn, conn
+        )
 
         slot.config = config
         result = slot.manager.connect(config)

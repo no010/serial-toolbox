@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 class ScriptState(Enum):
     """脚本状态"""
+
     IDLE = "idle"
     RUNNING = "running"
     PAUSED = "paused"
@@ -29,6 +30,7 @@ class ScriptState(Enum):
 @dataclass
 class Breakpoint:
     """断点"""
+
     line: int
     enabled: bool = True
     condition: str = ""  # 可选条件表达式
@@ -37,6 +39,7 @@ class Breakpoint:
 @dataclass(frozen=True)
 class _StatementUnit:
     """脚本中的一个顶层语句单元（连同其缩进块），exec 与断点的最小粒度"""
+
     start_line: int
     end_line: int
     source: str  # 语句源码，前面补齐空行使 compile 出的行号与脚本绝对行号一致
@@ -51,13 +54,13 @@ def _split_top_level_units(script: str) -> list[_StatementUnit]:
     """
     lines = script.splitlines()
     units: list[_StatementUnit] = []
-    for node in ast.parse(script, filename='<script>').body:
+    for node in ast.parse(script, filename="<script>").body:
         start = node.lineno
-        decorators = getattr(node, 'decorator_list', [])
+        decorators = getattr(node, "decorator_list", [])
         if decorators:
             start = min(start, min(d.lineno for d in decorators))
         end = node.end_lineno or start
-        source = '\n' * (start - 1) + '\n'.join(lines[start - 1:end])
+        source = "\n" * (start - 1) + "\n".join(lines[start - 1 : end])
         units.append(_StatementUnit(start, end, source))
     return units
 
@@ -66,7 +69,7 @@ def _script_line_hint(exc: BaseException) -> str:
     """取脚本自身帧的行号拼进错误信息；行号已按脚本对齐，可直接对照编辑器"""
     tb = exc.__traceback__
     while tb is not None:
-        if tb.tb_frame.f_code.co_filename == '<script>':
+        if tb.tb_frame.f_code.co_filename == "<script>":
             return f" (第 {tb.tb_lineno} 行)"
         tb = tb.tb_next
     if isinstance(exc, SyntaxError) and exc.lineno:
@@ -77,6 +80,7 @@ def _script_line_hint(exc: BaseException) -> str:
 @dataclass
 class ScriptContext:
     """脚本执行上下文 - 提供给脚本的 API"""
+
     serial_manager: Any
     log: Callable[[str], None]
     sleep: Callable[[float], None]
@@ -95,6 +99,7 @@ class ScriptContext:
     def send(self, data: str, hex_mode: bool = False) -> bool:
         """发送数据"""
         from src.core.serial_manager import DataFormat
+
         fmt = DataFormat.HEX if hex_mode else DataFormat.ASCII
         return self.serial_manager.send_text(data, fmt)
 
@@ -107,8 +112,9 @@ class ScriptContext:
         with self.response_lock:
             self.response_buffer.extend(data)
 
-    def wait_response(self, timeout: float = 1.0, expected_length: int = 0,
-                      terminator: bytes | None = None) -> bytes:
+    def wait_response(
+        self, timeout: float = 1.0, expected_length: int = 0, terminator: bytes | None = None
+    ) -> bytes:
         """
         等待响应数据
 
@@ -211,7 +217,7 @@ class ScriptContext:
                 # 检查条件
                 if bp.condition:
                     try:
-                        if not eval(bp.condition, {'ctx': self}):
+                        if not eval(bp.condition, {"ctx": self}):
                             return
                     except Exception:
                         pass
@@ -263,7 +269,7 @@ class ScriptEngine:
 
     def _log(self, msg: str):
         """输出日志"""
-        ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+        ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
         full_msg = f"[{ts}] {msg}"
         if self.on_log:
             self.on_log(full_msg)
@@ -295,37 +301,39 @@ class ScriptEngine:
                 serial_manager=self.serial_manager,
                 log=self._log,
                 sleep=self._interruptible_sleep,
-                stop_flag=self.stop_event
+                stop_flag=self.stop_event,
             )
-            context.pause_flag.set()      # 未暂停是初态，闸门才不会一开始就挡住脚本
+            context.pause_flag.set()  # 未暂停是初态，闸门才不会一开始就挡住脚本
             self._context = context
 
             # 连接响应数据
             original_callback = self.serial_manager.on_data_received
+
             def data_callback(data):
                 context.feed_response(data)
                 if original_callback:
                     original_callback(data)
+
             self.serial_manager.on_data_received = data_callback
 
             # 构建脚本环境
             script_env = {
-                'ctx': context,
-                'send': context.send,
-                'send_bytes': context.send_bytes,
-                'sleep': context.sleep,
-                'wait_response': context.wait_response,
-                'clear_response': context.clear_response_buffer,
-                'log': context.log_info,
-                'log_info': context.log_info,
-                'log_error': context.log_error,
-                'log_success': context.log_success,
-                'log_debug': context.log_debug,
-                'assert_equal': context.assert_equal,
-                'assert_contains': context.assert_contains,
-                'set_breakpoint': context.set_breakpoint,
-                'remove_breakpoint': context.remove_breakpoint,
-                'stop': self.stop,
+                "ctx": context,
+                "send": context.send,
+                "send_bytes": context.send_bytes,
+                "sleep": context.sleep,
+                "wait_response": context.wait_response,
+                "clear_response": context.clear_response_buffer,
+                "log": context.log_info,
+                "log_info": context.log_info,
+                "log_error": context.log_error,
+                "log_success": context.log_success,
+                "log_debug": context.log_debug,
+                "assert_equal": context.assert_equal,
+                "assert_contains": context.assert_contains,
+                "set_breakpoint": context.set_breakpoint,
+                "remove_breakpoint": context.remove_breakpoint,
+                "stop": self.stop,
             }
 
             # 按顶层语句逐个执行：缩进块必须整体交给 exec，块内单行无法独立运行
@@ -340,7 +348,7 @@ class ScriptEngine:
                 if self.on_line_executed:
                     self.on_line_executed(unit.start_line)
 
-                exec(compile(unit.source, '<script>', 'exec'), script_env)
+                exec(compile(unit.source, "<script>", "exec"), script_env)
                 self._step_after_unit(context)
 
             # stop() 会让上面的循环 break 出来，不能随后又报"执行成功"
@@ -397,7 +405,8 @@ class ScriptEngine:
             if line in context.breakpoints:
                 context.current_line = line
                 context.check_breakpoint(
-                    line, lambda paused=line: self._pause_at_breakpoint(paused))
+                    line, lambda paused=line: self._pause_at_breakpoint(paused)
+                )
                 if self.state == ScriptState.BREAKPOINT:
                     self._set_state(ScriptState.RUNNING)
                 return
@@ -433,14 +442,16 @@ class ScriptEngine:
     def resume(self):
         """恢复脚本（手动暂停、单步停下或停在断点上都可恢复）"""
         if self._context and self.state in (ScriptState.PAUSED, ScriptState.BREAKPOINT):
-            self._context.continue_execution()   # 同时退出单步模式
+            self._context.continue_execution()  # 同时退出单步模式
             self._set_state(ScriptState.RUNNING)
             self._log("脚本已恢复")
 
     def step_over(self):
         """单步执行"""
         if self._context and self.state in (
-            ScriptState.RUNNING, ScriptState.PAUSED, ScriptState.BREAKPOINT
+            ScriptState.RUNNING,
+            ScriptState.PAUSED,
+            ScriptState.BREAKPOINT,
         ):
             self._context.step()
             self._set_state(ScriptState.RUNNING)
@@ -463,7 +474,7 @@ class ScriptEngine:
 # ─── 示例脚本模板 ────────────────────────────────────────────
 
 EXAMPLE_SCRIPTS = {
-    "AT 指令测试": '''# AT 指令测试脚本
+    "AT 指令测试": """# AT 指令测试脚本
 log_info("开始 AT 指令测试")
 
 # 发送 AT 指令
@@ -482,9 +493,8 @@ resp = wait_response(timeout=0.5)
 log_info(f"信号: {resp}")
 
 log_success("AT 测试完成")
-''',
-
-    "Modbus 轮询": '''# Modbus 轮询脚本
+""",
+    "Modbus 轮询": """# Modbus 轮询脚本
 from src.core.protocol_parser import ModbusFunction, ModbusRTU
 
 SLAVE = 1
@@ -517,9 +527,8 @@ for i in range(5):
     sleep(0.2)
 
 log_success("Modbus 轮询完成")
-''',
-
-    "断点调试示例": '''# 断点调试示例
+""",
+    "断点调试示例": """# 断点调试示例
 log_info("开始调试")
 
 for i in range(10):
@@ -536,9 +545,8 @@ for i in range(10):
     sleep(0.3)
 
 log_success("调试完成")
-''',
-
-    "响应解析": '''# 响应解析示例
+""",
+    "响应解析": """# 响应解析示例
 log_info("开始响应解析测试")
 
 # 发送查询命令
@@ -558,5 +566,5 @@ else:
     log_error("设备未响应或错误")
 
 log_success("测试完成")
-''',
+""",
 }

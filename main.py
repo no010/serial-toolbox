@@ -13,6 +13,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from src.core.logging_config import setup_logging
 from src.ui.main_window import main
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     setup_logging()
     main()

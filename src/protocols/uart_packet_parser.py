@@ -17,8 +17,8 @@ class UARTPacketParser(ProtocolParserBase):
     # 默认帧格式:
     # [帧头 0xEB 0x90] [长度 2字节] [数据...] [CRC16 2字节] [帧尾 0x0D 0x0A]
 
-    FRAME_HEADER = b'\xEB\x90'
-    FRAME_TAIL = b'\x0D\x0A'
+    FRAME_HEADER = b"\xeb\x90"
+    FRAME_TAIL = b"\x0d\x0a"
 
     def detect_frame(self, data: bytes) -> tuple[bool, int]:
         """检测数据包"""
@@ -35,13 +35,13 @@ class UARTPacketParser(ProtocolParserBase):
             return False, 0
 
         # 解析长度
-        length = struct.unpack('>H', remaining[2:4])[0]
+        length = struct.unpack(">H", remaining[2:4])[0]
 
         # 计算帧长度: 帧头(2) + 长度(2) + 数据(N) + CRC(2) + 帧尾(2)
         expected_len = 2 + 2 + length + 2 + 2
         if len(remaining) >= expected_len:
             # 检查帧尾
-            if remaining[expected_len-2:expected_len] == self.FRAME_TAIL:
+            if remaining[expected_len - 2 : expected_len] == self.FRAME_TAIL:
                 return True, start + expected_len
 
         return False, 0
@@ -50,55 +50,46 @@ class UARTPacketParser(ProtocolParserBase):
         """解析数据包"""
         if len(data) < 6:
             return ParsedFrame(
-                protocol=self.name,
-                raw_data=data,
-                is_valid=False,
-                error_msg="帧太短"
+                protocol=self.name, raw_data=data, is_valid=False, error_msg="帧太短"
             )
 
         # 检查帧头
         if data[:2] != self.FRAME_HEADER:
             return ParsedFrame(
-                protocol=self.name,
-                raw_data=data,
-                is_valid=False,
-                error_msg="帧头错误"
+                protocol=self.name, raw_data=data, is_valid=False, error_msg="帧头错误"
             )
 
         # 检查帧尾
         if data[-2:] != self.FRAME_TAIL:
             return ParsedFrame(
-                protocol=self.name,
-                raw_data=data,
-                is_valid=False,
-                error_msg="帧尾错误"
+                protocol=self.name, raw_data=data, is_valid=False, error_msg="帧尾错误"
             )
 
         # 解析长度
-        length = struct.unpack('>H', data[2:4])[0]
+        length = struct.unpack(">H", data[2:4])[0]
 
         # 解析数据
-        payload = data[4:4+length]
+        payload = data[4 : 4 + length]
 
         # CRC 校验
-        received_crc = struct.unpack('>H', data[4+length:4+length+2])[0]
-        calculated_crc = self._calculate_crc16(data[2:4+length])
+        received_crc = struct.unpack(">H", data[4 + length : 4 + length + 2])[0]
+        calculated_crc = self._calculate_crc16(data[2 : 4 + length])
 
-        crc_valid = (received_crc == calculated_crc)
+        crc_valid = received_crc == calculated_crc
 
         return ParsedFrame(
             protocol=self.name,
             raw_data=data,
             fields={
-                'length': length,
-                'data': ' '.join(f'{b:02X}' for b in payload),
-                'data_bytes': list(payload),
-                'data_ascii': payload.decode('utf-8', errors='replace'),
-                'crc_valid': crc_valid,
-                'crc_received': f"0x{received_crc:04X}",
-                'crc_calculated': f"0x{calculated_crc:04X}",
+                "length": length,
+                "data": " ".join(f"{b:02X}" for b in payload),
+                "data_bytes": list(payload),
+                "data_ascii": payload.decode("utf-8", errors="replace"),
+                "crc_valid": crc_valid,
+                "crc_received": f"0x{received_crc:04X}",
+                "crc_calculated": f"0x{calculated_crc:04X}",
             },
-            is_valid=crc_valid
+            is_valid=crc_valid,
         )
 
     def build_frame(self, data: bytes) -> bytes:  # type: ignore
@@ -108,12 +99,12 @@ class UARTPacketParser(ProtocolParserBase):
 
         frame = bytearray()
         frame.extend(self.FRAME_HEADER)
-        frame.extend(struct.pack('>H', len(data)))
+        frame.extend(struct.pack(">H", len(data)))
         frame.extend(data)
 
         # 计算 CRC
         crc = self._calculate_crc16(bytes(frame[2:]))
-        frame.extend(struct.pack('>H', crc))
+        frame.extend(struct.pack(">H", crc))
 
         frame.extend(self.FRAME_TAIL)
 
@@ -134,11 +125,11 @@ class UARTPacketParser(ProtocolParserBase):
     def get_fields_description(self) -> dict:
         """获取字段说明"""
         return {
-            'length': '数据长度',
-            'data': '数据内容 (十六进制)',
-            'data_bytes': '数据内容 (字节列表)',
-            'data_ascii': '数据内容 (ASCII)',
-            'crc_valid': 'CRC 校验是否通过',
-            'crc_received': '接收到的 CRC',
-            'crc_calculated': '计算出的 CRC',
+            "length": "数据长度",
+            "data": "数据内容 (十六进制)",
+            "data_bytes": "数据内容 (字节列表)",
+            "data_ascii": "数据内容 (ASCII)",
+            "crc_valid": "CRC 校验是否通过",
+            "crc_received": "接收到的 CRC",
+            "crc_calculated": "计算出的 CRC",
         }

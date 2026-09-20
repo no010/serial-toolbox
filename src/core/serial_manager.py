@@ -15,6 +15,7 @@ import serial.tools.list_ports
 
 class DataFormat(Enum):
     """数据格式"""
+
     ASCII = "ASCII"
     HEX = "HEX"
 
@@ -22,12 +23,13 @@ class DataFormat(Enum):
 @dataclass
 class SerialConfig:
     """串口配置"""
+
     port: str
     baudrate: int = 115200
     data_bits: int = 8
     stop_bits: float = 1
-    parity: str = 'N'  # N, E, O, M, S
-    flow_control: str = 'None'  # None, RTS/CTS, XON/XOFF
+    parity: str = "N"  # N, E, O, M, S
+    flow_control: str = "None"  # None, RTS/CTS, XON/XOFF
     timeout: float = 0.1
 
 
@@ -53,15 +55,17 @@ class SerialManager:
         ports = serial.tools.list_ports.comports()
         result = []
         for port in ports:
-            result.append({
-                'device': port.device,
-                'name': port.name,
-                'description': port.description,
-                'hwid': port.hwid,
-                'vid': port.vid,
-                'pid': port.pid,
-                'serial_number': port.serial_number,
-            })
+            result.append(
+                {
+                    "device": port.device,
+                    "name": port.name,
+                    "description": port.description,
+                    "hwid": port.hwid,
+                    "vid": port.vid,
+                    "pid": port.pid,
+                    "serial_number": port.serial_number,
+                }
+            )
         return result
 
     def connect(self, config: SerialConfig) -> bool:
@@ -74,11 +78,11 @@ class SerialManager:
 
             # 映射参数
             parity_map = {
-                'N': serial.PARITY_NONE,
-                'E': serial.PARITY_EVEN,
-                'O': serial.PARITY_ODD,
-                'M': serial.PARITY_MARK,
-                'S': serial.PARITY_SPACE,
+                "N": serial.PARITY_NONE,
+                "E": serial.PARITY_EVEN,
+                "O": serial.PARITY_ODD,
+                "M": serial.PARITY_MARK,
+                "S": serial.PARITY_SPACE,
             }
             stop_bits_map = {
                 1: serial.STOPBITS_ONE,
@@ -96,9 +100,9 @@ class SerialManager:
             )
 
             # 流控
-            if config.flow_control == 'RTS/CTS':
+            if config.flow_control == "RTS/CTS":
                 self.serial.rtscts = True
-            elif config.flow_control == 'XON/XOFF':
+            elif config.flow_control == "XON/XOFF":
                 self.serial.xonxoff = True
 
             self.is_connected = True
@@ -152,10 +156,10 @@ class SerialManager:
         """发送文本"""
         try:
             if format == DataFormat.ASCII:
-                data = text.encode('utf-8')
+                data = text.encode("utf-8")
             else:  # HEX
                 # 解析十六进制字符串，支持空格分隔
-                hex_str = text.replace(' ', '').replace('\n', '').replace('\r', '')
+                hex_str = text.replace(" ", "").replace("\n", "").replace("\r", "")
                 data = bytes.fromhex(hex_str)
             return self.send(data)
         except Exception as e:
@@ -197,12 +201,12 @@ class SerialManager:
             return {}
         try:
             return {
-                'dtr': self.serial.dtr,
-                'rts': self.serial.rts,
-                'cts': self.serial.cts,
-                'dsr': self.serial.dsr,
-                'cd': getattr(self.serial, 'cd', False),
-                'ri': getattr(self.serial, 'ri', False),
+                "dtr": self.serial.dtr,
+                "rts": self.serial.rts,
+                "cts": self.serial.cts,
+                "dsr": self.serial.dsr,
+                "cd": getattr(self.serial, "cd", False),
+                "ri": getattr(self.serial, "ri", False),
             }
         except Exception:
             return {}
@@ -235,13 +239,13 @@ class SerialManager:
             return {}
 
         return {
-            'port': self.serial.port,
-            'baudrate': self.serial.baudrate,
-            'bytesize': self.serial.bytesize,
-            'stopbits': self.serial.stopbits,
-            'parity': self.serial.parity,
-            'rts': self.serial.rts,
-            'cts': self.serial.cts,
-            'dtr': self.serial.dtr,
-            'dsr': self.serial.dsr,
+            "port": self.serial.port,
+            "baudrate": self.serial.baudrate,
+            "bytesize": self.serial.bytesize,
+            "stopbits": self.serial.stopbits,
+            "parity": self.serial.parity,
+            "rts": self.serial.rts,
+            "cts": self.serial.cts,
+            "dtr": self.serial.dtr,
+            "dsr": self.serial.dsr,
         }
