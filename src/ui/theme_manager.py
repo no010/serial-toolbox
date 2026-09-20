@@ -6,6 +6,8 @@
 from dataclasses import dataclass
 from enum import Enum
 
+from PyQt6.QtGui import QColor, QPalette
+
 
 class ThemeMode(Enum):
     """主题模式"""
@@ -312,3 +314,35 @@ class ThemeManager:
     def get_current_mode(self) -> ThemeMode:
         """获取当前模式"""
         return self.current_mode
+
+    def build_palette(self, theme: ThemeColors | None = None) -> QPalette:
+        """
+        由主题配色构造 QPalette。
+
+        只靠 QSS 不够：没被 QSS 覆盖背景的控件（如中央 QWidget）会回落到系统调色板，
+        在深色模式系统上就变成"浅色表面 + 浅色文字"。调色板与 QSS 成套应用后，
+        操作系统的亮/暗配色不再从缝隙漏进来。
+        """
+        if theme is None:
+            theme = self.get_theme()
+
+        palette = QPalette()
+        roles = {
+            QPalette.ColorRole.Window: theme.background,
+            QPalette.ColorRole.WindowText: theme.text_primary,
+            QPalette.ColorRole.Base: theme.input_background,
+            QPalette.ColorRole.AlternateBase: theme.surface,
+            QPalette.ColorRole.Text: theme.text_primary,
+            QPalette.ColorRole.Button: theme.surface_variant,
+            QPalette.ColorRole.ButtonText: theme.text_primary,
+            QPalette.ColorRole.Highlight: theme.tab_selected_bg,
+            QPalette.ColorRole.HighlightedText: theme.tab_selected_text,
+            QPalette.ColorRole.PlaceholderText: theme.text_disabled,
+            QPalette.ColorRole.BrightText: "#ffffff",
+            QPalette.ColorRole.ToolTipBase: theme.surface,
+            QPalette.ColorRole.ToolTipText: theme.text_primary,
+            QPalette.ColorRole.Link: "#4FC3F7",
+        }
+        for role, color in roles.items():
+            palette.setColor(role, QColor(color))
+        return palette

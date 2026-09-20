@@ -29,6 +29,7 @@ class AppConfig:
     show_timestamp: bool = True
     auto_scroll: bool = True
     send_newline: bool = True
+    theme: str = "dark"                # dark | light
 
     # 自动发送
     auto_send_interval: int = 1000
