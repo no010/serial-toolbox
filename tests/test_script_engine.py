@@ -296,6 +296,75 @@ def test_stop_mid_script_is_not_reported_as_success():
     assert "已被用户停止" in result.get("msg", ""), f"停止原因未回传: {result}"
 
 
+# ─── 引擎级断点（行号槽入口，跨运行存活）─────────────────────
+
+
+def test_engine_set_breakpoint_pauses_and_survives_rerun():
+    """编辑器行号槽设置的断点：首次运行即命中，脚本结束后再次运行仍命中（此前上下文销毁即丢）。"""
+    eng = ScriptEngine(FakeSerial())
+    logs: list[str] = []
+    result: dict = {}
+    eng.on_log = logs.append
+    eng.on_finished = lambda ok, msg: result.update(ok=ok, msg=msg)
+    eng.set_breakpoint(2)
+
+    eng.execute('log_info("a")\nlog_info("b")')
+    assert eng.thread is not None
+    assert _wait_until(lambda: eng.state == ScriptState.BREAKPOINT), f"断点未命中: {logs}"
+    assert not any("b" in line for line in logs), "断点行不应已执行"
+
+    eng.resume()
+    eng.thread.join(timeout=5)
+    assert result.get("ok") is True, f"恢复后执行失败: {result}"
+    assert eng.has_breakpoint(2) and 2 in eng.breakpoints
+
+    # 第二次运行：上下文已重建，断点仍须生效
+    result.clear()
+    eng.execute('log_info("a")\nlog_info("b")')
+    assert eng.thread is not None
+    assert _wait_until(lambda: eng.state == ScriptState.BREAKPOINT), f"重跑后断点丢失: {logs}"
+    eng.resume()
+    eng.thread.join(timeout=5)
+    assert result.get("ok") is True, f"重跑恢复后执行失败: {result}"
+
+
+def test_engine_remove_breakpoint_clears_marker():
+    eng = ScriptEngine(FakeSerial())
+    eng.on_log = lambda m: None
+    eng.set_breakpoint(3)
+    assert eng.has_breakpoint(3)
+    eng.remove_breakpoint(3)
+    assert not eng.has_breakpoint(3) and 3 not in eng.breakpoints
+    eng.remove_breakpoint(99)  # 移除不存在的行不应抛错
+
+
+def test_script_set_breakpoint_syncs_to_engine_store():
+    """脚本内 set_breakpoint 同步进引擎权威副本：重跑时经种子化再次命中。"""
+    eng = ScriptEngine(FakeSerial())
+    logs: list[str] = []
+    result: dict = {}
+    eng.on_log = logs.append
+    eng.on_finished = lambda ok, msg: result.update(ok=ok, msg=msg)
+
+    eng.execute('log_info("a")\nset_breakpoint(3)\nlog_info("b")')
+    assert eng.thread is not None
+    assert _wait_until(lambda: eng.state == ScriptState.BREAKPOINT), f"块内断点未命中: {logs}"
+    assert eng.has_breakpoint(3), "脚本设置的断点未同步到引擎"
+
+    eng.resume()
+    eng.thread.join(timeout=5)
+    assert result.get("ok") is True, f"恢复后执行失败: {result}"
+
+    # 重跑：第 3 行断点经引擎种子化再次命中，无需脚本再执行 set_breakpoint
+    result.clear()
+    eng.execute('log_info("a")\nlog_info("skip")\nlog_info("b")')
+    assert eng.thread is not None
+    assert _wait_until(lambda: eng.state == ScriptState.BREAKPOINT), f"种子化断点未命中: {logs}"
+    eng.resume()
+    eng.thread.join(timeout=5)
+    assert result.get("ok") is True, f"重跑恢复后执行失败: {result}"
+
+
 # ─── 手动暂停与单步 ──────────────────────────────────────────
 
 # 拆成多条顶层语句，中间用 sleep 留出可观测的时间窗

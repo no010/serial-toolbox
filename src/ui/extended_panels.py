@@ -5,8 +5,8 @@ v3.0 新增面板: Modbus解析、日志设置、脚本编辑器、多串口对�
 
 import json
 
-from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QFont
+from PyQt6.QtCore import QRectF, Qt, pyqtSignal, pyqtSlot
+from PyQt6.QtGui import QColor, QFont, QFontMetrics, QMouseEvent, QPainter, QPalette
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -331,6 +331,98 @@ class LogSettingsDialog(QDialog):
 # ─── 脚本编辑器面板 ─────────────────────────────────────────
 
 
+class BreakpointGutter(QWidget):
+    """代码编辑器行号槽：点击行号切换引擎断点，断点行画红点，命中行高亮"""
+
+    _DOT_COLOR = QColor("#e81123")
+    _NUMBER_COLOR = QColor("#8a8a8a")
+    _HIT_COLOR = QColor(255, 215, 0, 60)
+
+    def __init__(self, code_edit: QPlainTextEdit, engine: ScriptEngine | None, parent=None):
+        super().__init__(parent)
+        self.code_edit = code_edit
+        self.engine = engine
+        self.hit_line = 0  # 断点命中高亮行（0 = 无）
+        self.setFixedWidth(QFontMetrics(code_edit.font()).horizontalAdvance("0000") + 24)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        code_edit.updateRequest.connect(self._on_update_request)
+        code_edit.blockCountChanged.connect(lambda _count: self.update())
+        scroll_bar = code_edit.verticalScrollBar()
+        assert scroll_bar is not None
+        scroll_bar.valueChanged.connect(lambda _v: self.update())
+
+    def set_hit_line(self, line: int):
+        self.hit_line = line
+        self.update()
+
+    def _on_update_request(self, _rect, _dy: int):
+        self.update()
+
+    def _visible_lines(self):
+        """按可见顺序产出 (1 起始行号, 顶部 y, 底部 y)，坐标为编辑器视口系"""
+        edit = self.code_edit
+        block = edit.firstVisibleBlock()
+        number = block.blockNumber()
+        top = edit.blockBoundingGeometry(block).translated(edit.contentOffset()).top()
+        bottom = top + edit.blockBoundingRect(block).height()
+        while block.isValid():
+            if block.isVisible():
+                yield number + 1, top, bottom
+            block = block.next()
+            top = bottom
+            bottom = top + edit.blockBoundingRect(block).height()
+            number += 1
+
+    def line_at(self, y: float) -> int:
+        """把槽内的 y 坐标映射成 1 起始的行号，空白区域返回 -1"""
+        for line, top, bottom in self._visible_lines():
+            if top <= y < bottom:
+                return line
+        return -1
+
+    def mousePressEvent(self, a0: QMouseEvent | None):
+        if a0 is None or self.engine is None:
+            return
+        line = self.line_at(a0.position().y())
+        if line < 1:
+            return
+        if self.engine.has_breakpoint(line):
+            self.engine.remove_breakpoint(line)
+        else:
+            self.engine.set_breakpoint(line)
+        self.update()
+
+    def paintEvent(self, a0):
+        if a0 is None:
+            return
+        painter = QPainter(self)
+        base = self.code_edit.palette().color(QPalette.ColorRole.Base)
+        painter.fillRect(self.rect(), base.darker(108))
+
+        painter.setFont(self.code_edit.font())
+        for line, top, bottom in self._visible_lines():
+            if top > self.height():
+                break
+            if bottom < 0:
+                continue
+            rect = QRectF(0, top, self.width(), bottom - top)
+            if line == self.hit_line:
+                painter.fillRect(rect, self._HIT_COLOR)
+            if self.engine is not None and self.engine.has_breakpoint(line):
+                # 红点靠左、行号照常画：换行或加断点时行号不会跳位
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(self._DOT_COLOR)
+                painter.drawEllipse(QRectF(6, rect.center().y() - 4.5, 9, 9))
+            painter.setPen(self._NUMBER_COLOR)
+            painter.drawText(
+                rect.adjusted(0, 0, -6, 0),
+                int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+                str(line),
+            )
+        painter.end()
+
+
 class ScriptEditorPanel(QGroupBox):
     """Python 脚本编辑器面板"""
 
@@ -338,6 +430,7 @@ class ScriptEditorPanel(QGroupBox):
     script_log = pyqtSignal(str)
     script_finished = pyqtSignal(bool, str)
     script_state_changed = pyqtSignal(str)
+    breakpoint_hit = pyqtSignal(int)
 
     _STATE_KEYS = {
         "idle": "status_idle",
@@ -360,6 +453,7 @@ class ScriptEditorPanel(QGroupBox):
             self.engine.on_log = self.script_log.emit
             self.engine.on_finished = self.script_finished.emit
             self.engine.on_state_changed = lambda state: self.script_state_changed.emit(state.value)
+            self.engine.on_breakpoint = self.breakpoint_hit.emit
         self.init_ui()
         self.retranslate_ui()
 
@@ -415,10 +509,17 @@ class ScriptEditorPanel(QGroupBox):
         ctrl.addStretch()
         layout.addLayout(ctrl)
 
-        # 代码编辑区
+        # 代码编辑区（行号槽 + 编辑器并排放）
         self.code_edit = QPlainTextEdit()
         self.code_edit.setFont(QFont("Consolas", 10))
-        layout.addWidget(self.code_edit)
+        editor_row = QHBoxLayout()
+        editor_row.setContentsMargins(0, 0, 0, 0)
+        editor_row.setSpacing(0)
+        self.gutter = BreakpointGutter(self.code_edit, self.engine)
+        self.gutter.setVisible(self.engine is not None)
+        editor_row.addWidget(self.gutter)
+        editor_row.addWidget(self.code_edit)
+        layout.addLayout(editor_row)
 
         # 输出区
         head = QHBoxLayout()
@@ -436,6 +537,7 @@ class ScriptEditorPanel(QGroupBox):
 
         self.script_finished.connect(self._on_engine_finished)
         self.script_state_changed.connect(self._on_engine_state)
+        self.breakpoint_hit.connect(self.gutter.set_hit_line)
 
         # 加载下拉框当前选中的示例（此前写死了一个不存在的示例名，代码区一直是空的）
         self._load_example(self.example_combo.currentText())
@@ -476,6 +578,8 @@ class ScriptEditorPanel(QGroupBox):
 
     def _on_engine_state(self, state: str):
         """引擎状态变化（由 script_state_changed 跨线程触发）"""
+        if state != "breakpoint":
+            self.gutter.set_hit_line(0)
         self._update_controls(state)
 
     def _update_controls(self, state: str):

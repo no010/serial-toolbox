@@ -194,17 +194,6 @@ class ScriptContext:
 
     # ─── 断点控制 ────────────────────────────────────────────
 
-    def set_breakpoint(self, line: int, condition: str = ""):
-        """设置断点"""
-        self.breakpoints[line] = Breakpoint(line=line, condition=condition)
-        self.log(f"[断点] 在第 {line} 行设置断点")
-
-    def remove_breakpoint(self, line: int):
-        """移除断点"""
-        if line in self.breakpoints:
-            del self.breakpoints[line]
-            self.log(f"[断点] 移除第 {line} 行断点")
-
     def check_breakpoint(self, line: int, on_pause: Callable[[], None] | None = None):
         """
         检查是否命中断点，命中则阻塞到被唤醒。
@@ -260,6 +249,41 @@ class ScriptEngine:
         self._current_script: str = ""
         self._result_msg: str = ""
         self._context: ScriptContext | None = None
+        # 断点的权威副本挂在引擎上：上下文每次执行都重建，断点必须跨运行存活
+        self._breakpoints: dict[int, Breakpoint] = {}
+
+    @property
+    def breakpoints(self) -> dict[int, Breakpoint]:
+        """断点快照（编辑器行号槽据此绘制标记）"""
+        return dict(self._breakpoints)
+
+    def has_breakpoint(self, line: int) -> bool:
+        return line in self._breakpoints
+
+    def set_breakpoint(self, line: int, condition: str = ""):
+        """设置断点（行号槽点击与脚本 set_breakpoint 共用同一入口）"""
+        bp = Breakpoint(line=line, condition=condition)
+        self._breakpoints[line] = bp
+        if self._context:
+            self._context.breakpoints[line] = bp
+
+    def remove_breakpoint(self, line: int):
+        """移除断点"""
+        self._breakpoints.pop(line, None)
+        if self._context:
+            self._context.breakpoints.pop(line, None)
+
+    def _script_set_breakpoint(self, context: ScriptContext, line: int, condition: str = ""):
+        """脚本内 set_breakpoint()：同步进引擎权威副本，断点对后续运行与行号槽保持可见"""
+        bp = Breakpoint(line=line, condition=condition)
+        context.breakpoints[line] = bp
+        self._breakpoints[line] = bp
+        self._log(f"[断点] 在第 {line} 行设置断点")
+
+    def _script_remove_breakpoint(self, context: ScriptContext, line: int):
+        context.breakpoints.pop(line, None)
+        self._breakpoints.pop(line, None)
+        self._log(f"[断点] 移除第 {line} 行断点")
 
     def _set_state(self, state: ScriptState):
         """设置状态"""
@@ -304,6 +328,7 @@ class ScriptEngine:
                 stop_flag=self.stop_event,
             )
             context.pause_flag.set()  # 未暂停是初态，闸门才不会一开始就挡住脚本
+            context.breakpoints.update(self._breakpoints)
             self._context = context
 
             # 连接响应数据
@@ -331,8 +356,10 @@ class ScriptEngine:
                 "log_debug": context.log_debug,
                 "assert_equal": context.assert_equal,
                 "assert_contains": context.assert_contains,
-                "set_breakpoint": context.set_breakpoint,
-                "remove_breakpoint": context.remove_breakpoint,
+                "set_breakpoint": lambda line, condition="": self._script_set_breakpoint(
+                    context, line, condition
+                ),
+                "remove_breakpoint": lambda line: self._script_remove_breakpoint(context, line),
                 "stop": self.stop,
             }
 
