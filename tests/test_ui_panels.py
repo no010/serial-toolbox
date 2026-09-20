@@ -264,7 +264,7 @@ def test_theme_menu_switches_palette_and_stylesheet(qapp, monkeypatch, tmp_path)
 
     w._select_theme(ThemeMode.DARK)
     assert window_color() == dark.background
-    assert dark.text_primary in w.styleSheet()          # QSS 与调色板成套
+    assert dark.text_primary in w.styleSheet()  # QSS 与调色板成套
     assert text_color() != window_color(), "文字与背景同色会不可见"
 
     w._select_theme(ThemeMode.LIGHT)
