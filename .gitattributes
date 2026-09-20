@@ -1,0 +1,32 @@
+# 换行策略：仓库内统一以 LF 存储文本文件。
+# 各人工作区仍由自己的 core.autocrlf 决定（Windows 上签出 CRLF，Linux/macOS 与 CI 上为 LF），
+# 因此未设置 autocrlf 的贡献者也不会再把整文件换行抖动带进 diff。
+* text=auto
+
+# 本项目实际存在的文本类型，显式声明以防内容嗅探误判
+*.py text
+*.md text
+*.txt text
+*.yml text
+*.yaml text
+*.toml text
+*.json text
+*.spec text
+.gitignore text
+.python-version text
+
+# 锁定文件：生成物固定 LF，避免 uv.lock 在不同平台产生纯换行 diff
+uv.lock text eol=lf
+
+# 二进制内容一律不做换行与 diff 处理
+*.png binary
+*.ico binary
+*.jpg binary
+*.gif binary
+*.pdf binary
+*.exe binary
+*.dll binary
+*.pyd binary
+*.zip binary
+*.whl binary
+*.pyc binary
