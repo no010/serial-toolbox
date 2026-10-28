@@ -11,14 +11,27 @@ I2C 总线适配层
 from __future__ import annotations
 
 import ctypes
+import os
 import sys
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Protocol, cast, runtime_checkable
 
 # CH347 硬件支持的 SCL 档位，值对应官方库 i2c_set 的 0..3
 I2C_SPEEDS_KHZ = (20, 100, 400, 750)
 
 _SCAN_ADDRESSES = range(0x08, 0x78)  # 7 位地址的保留段之外
+
+
+def _address_header(device_addr: int, mem_addr: int, addr_width: int, write: bool) -> bytes:
+    """拼 (地址<<1 | 方向) + 内部地址，适配器共用的校验与编码"""
+    if not 0 <= device_addr <= 0x7F:
+        raise I2CError(f"设备地址超出 7 位范围: {device_addr:#04x}")
+    if addr_width not in (1, 2):
+        raise I2CError(f"内部地址宽度只能是 1 或 2 字节: {addr_width}")
+    if not 0 <= mem_addr < 1 << (8 * addr_width):
+        raise I2CError(f"内部地址 {mem_addr:#x} 超出 {addr_width} 字节范围")
+    first = device_addr << 1 | (0 if write else 1)
+    return bytes([first]) + mem_addr.to_bytes(addr_width, "big")
 
 
 class I2CError(Exception):
@@ -146,17 +159,6 @@ class Ch347I2CAdapter:
             raise I2CError(f"设备 {write_data[0] >> 1:#04x} 无应答")
         return data or b""
 
-    @staticmethod
-    def _address_bytes(device_addr: int, mem_addr: int, addr_width: int, write: bool) -> bytes:
-        if not 0 <= device_addr <= 0x7F:
-            raise I2CError(f"设备地址超出 7 位范围: {device_addr:#04x}")
-        if addr_width not in (1, 2):
-            raise I2CError(f"内部地址宽度只能是 1 或 2 字节: {addr_width}")
-        if not 0 <= mem_addr < 1 << (8 * addr_width):
-            raise I2CError(f"内部地址 {mem_addr:#x} 超出 {addr_width} 字节范围")
-        first = device_addr << 1 | (0 if write else 1)
-        return bytes([first]) + mem_addr.to_bytes(addr_width, "big")
-
     def scan(self) -> list[int]:
         device = self._require_device()
         found: list[int] = []
@@ -171,7 +173,7 @@ class Ch347I2CAdapter:
             raise I2CError(f"读取长度不能为负: {length}")
         if length == 0:
             return b""
-        write_data = self._address_bytes(device_addr, mem_addr, addr_width, write=False)
+        write_data = _address_header(device_addr, mem_addr, addr_width, write=False)
         data = self._stream(write_data, length)
         if len(data) != length:
             raise I2CError(f"读取长度不足: 期望 {length}, 实际 {len(data)}")
@@ -180,9 +182,7 @@ class Ch347I2CAdapter:
     def write(self, device_addr: int, mem_addr: int, data: bytes, addr_width: int = 1) -> None:
         if not data:
             return
-        write_data = self._address_bytes(device_addr, mem_addr, addr_width, write=True) + bytes(
-            data
-        )
+        write_data = _address_header(device_addr, mem_addr, addr_width, write=True) + bytes(data)
         self._stream(write_data, 0)
 
     def supports_eeprom_page_write(self) -> bool:
@@ -192,6 +192,191 @@ class Ch347I2CAdapter:
         if self._device is None:
             return "CH347 (未打开)"
         return f"CH347 #{self._device_index} @ {self._speed_khz} kHz"
+
+
+CH341_DLL_ENV_VAR = "I2CTOOL_CH341_DLL"
+_CH341_DLL_NAMES = ("CH341DLL.dll", "CH341DLL.DLL", "CH341PAR.dll", "ch341.dll")
+_CH341_SPEED_MODES = {20: 0, 100: 1, 400: 2, 750: 3}
+_CH341_WRITE_CHUNK = 512
+_CH341_READ_CHUNK = 1024
+_INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
+
+
+@runtime_checkable
+class _Ch341Dll(Protocol):
+    """适配器实际用到的 WCH CH341 接口（测试用替身按此实现即可）"""
+
+    def CH341OpenDevice(self, index) -> int | None: ...
+
+    def CH341CloseDevice(self, index) -> bool: ...
+
+    def CH341SetStream(self, index, mode) -> bool: ...
+
+    def CH341StreamI2C(self, index, write_len, write_buf, read_len, read_buf) -> bool: ...
+
+
+def load_ch341_dll(path: str | None = None) -> _Ch341Dll | None:
+    """
+    按 dll_path → I2CTOOL_CH341_DLL → 程序目录 → 系统常见文件名 的顺序加载厂商库。
+
+    CH341DLL.dll 不由本仓库分发，需用户自行放到 exe/脚本同目录或用环境变量指定。
+    """
+    if sys.platform != "win32":
+        return None
+    candidates: list[str] = []
+    if path:
+        candidates.append(path)
+    env_path = os.environ.get(CH341_DLL_ENV_VAR)
+    if env_path:
+        candidates.append(env_path)
+    candidates.append(str(Path(sys.executable).with_name("CH341DLL.dll")))
+    candidates.append(str(Path.cwd() / "CH341DLL.dll"))
+    candidates.extend(_CH341_DLL_NAMES)
+    for name in candidates:
+        try:
+            return cast(_Ch341Dll, ctypes.WinDLL(name))
+        except OSError:
+            continue
+    return None
+
+
+class Ch341I2CAdapter:
+    """
+    CH341 USB 桥的 I2C 适配器，封装 WCH 的 CH341DLL（仅 Windows）。
+
+    移植自 I2CTool 的 adapters/ch341_adapter.py（MIT，commit 71f032e），见 THIRD_PARTY.md。
+    CH341 没有 RetACK 接口，扫描靠"写地址字节 + 读 1 字节"是否成功来判定。
+    """
+
+    def __init__(self, device_index: int = 0, dll_path: str | None = None):
+        self._device_index = device_index
+        self._dll_path = dll_path
+        self._dll: _Ch341Dll | None = None
+        self._speed_khz = 100
+
+    @classmethod
+    def unavailable_reason(cls) -> str:
+        if sys.platform != "win32":
+            return f"CH341 厂商库只有 Windows 版，当前平台是 {sys.platform}"
+        if load_ch341_dll() is None:
+            return f"未找到 CH341DLL.dll：放到程序目录，或用环境变量 {CH341_DLL_ENV_VAR} 指定路径"
+        return ""
+
+    def _require_dll(self) -> _Ch341Dll:
+        if self._dll is None:
+            raise I2CError("CH341 未打开")
+        return self._dll
+
+    def is_connected(self) -> bool:
+        return self._dll is not None
+
+    def open(self) -> None:
+        dll = load_ch341_dll(self._dll_path)
+        if dll is None:
+            raise I2CError(self.unavailable_reason() or "CH341 厂商库加载失败")
+        try:
+            handle = dll.CH341OpenDevice(ctypes.c_ulong(self._device_index))
+        except (OSError, AttributeError) as exc:
+            raise I2CError(f"CH341 厂商库调用失败: {exc}") from exc
+        if handle == _INVALID_HANDLE_VALUE or handle is None:
+            raise I2CError(f"打开 CH341 失败（设备编号 {self._device_index}），检查 USB 连接与驱动")
+        self._dll = dll
+        self.set_speed(self._speed_khz)
+
+    def close(self) -> None:
+        if self._dll is not None:
+            self._dll.CH341CloseDevice(ctypes.c_ulong(self._device_index))
+            self._dll = None
+
+    def set_speed(self, khz: int) -> None:
+        if khz not in _CH341_SPEED_MODES:
+            raise I2CError(f"CH341 不支持 {khz} kHz，可选: {tuple(_CH341_SPEED_MODES)}")
+        if self._dll is not None:
+            ok = self._dll.CH341SetStream(
+                ctypes.c_ulong(self._device_index), ctypes.c_ulong(_CH341_SPEED_MODES[khz])
+            )
+            if not ok:
+                raise I2CError(f"CH341SetStream 设置 {khz} kHz 失败")
+        self._speed_khz = khz
+
+    def supports_eeprom_page_write(self) -> bool:
+        return True
+
+    def get_info(self) -> str:
+        if self._dll is None:
+            return "CH341 (未打开)"
+        return f"CH341 #{self._device_index} @ {self._speed_khz} kHz"
+
+    def scan(self) -> list[int]:
+        dll = self._require_dll()
+        found: list[int] = []
+        for addr in _SCAN_ADDRESSES:
+            write_buf = (ctypes.c_ubyte * 1)(addr << 1)
+            read_buf = (ctypes.c_ubyte * 1)()
+            try:
+                ok = dll.CH341StreamI2C(
+                    ctypes.c_ulong(self._device_index),
+                    ctypes.c_ulong(1),
+                    write_buf,
+                    ctypes.c_ulong(1),
+                    read_buf,
+                )
+            except OSError:
+                continue
+            if ok:
+                found.append(addr)
+        return found
+
+    def read(self, device_addr: int, mem_addr: int, length: int, addr_width: int = 1) -> bytes:
+        dll = self._require_dll()
+        if length < 0:
+            raise I2CError(f"读取长度不能为负: {length}")
+        if length == 0:
+            return b""
+        _address_header(device_addr, mem_addr, addr_width, write=False)  # 先校验参数
+        result = bytearray()
+        current = mem_addr
+        remaining = length
+        while remaining > 0:
+            chunk = min(remaining, _CH341_READ_CHUNK)
+            header = _address_header(device_addr, current, addr_width, write=False)
+            write_buf = (ctypes.c_ubyte * len(header)).from_buffer_copy(header)
+            read_buf = (ctypes.c_ubyte * chunk)()
+            ok = dll.CH341StreamI2C(
+                ctypes.c_ulong(self._device_index),
+                ctypes.c_ulong(len(header)),
+                write_buf,
+                ctypes.c_ulong(chunk),
+                read_buf,
+            )
+            if not ok:
+                raise I2CError(f"CH341 读取失败: 设备 {device_addr:#04x} 地址 {current:#x}")
+            result.extend(bytes(read_buf))
+            current += chunk
+            remaining -= chunk
+        return bytes(result)
+
+    def write(self, device_addr: int, mem_addr: int, data: bytes, addr_width: int = 1) -> None:
+        dll = self._require_dll()
+        _address_header(device_addr, mem_addr, addr_width, write=True)  # 先校验参数
+        offset = 0
+        current = mem_addr
+        while offset < len(data):
+            chunk = data[offset : offset + _CH341_WRITE_CHUNK]
+            header = _address_header(device_addr, current, addr_width, write=True)
+            frame = header + chunk
+            write_buf = (ctypes.c_ubyte * len(frame)).from_buffer_copy(frame)
+            ok = dll.CH341StreamI2C(
+                ctypes.c_ulong(self._device_index),
+                ctypes.c_ulong(len(frame)),
+                write_buf,
+                ctypes.c_ulong(0),
+                None,
+            )
+            if not ok:
+                raise I2CError(f"CH341 写入失败: 设备 {device_addr:#04x} 地址 {current:#x}")
+            offset += len(chunk)
+            current += len(chunk)
 
 
 class SimulationAdapter:

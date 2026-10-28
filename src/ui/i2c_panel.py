@@ -27,7 +27,12 @@ from PyQt6.QtWidgets import (
 )
 
 from src.core.eeprom import EEPROMManager, EEPROMOperations
-from src.core.i2c_bus import I2C_SPEEDS_KHZ, Ch347I2CAdapter, I2CAdapter
+from src.core.i2c_bus import (
+    I2C_SPEEDS_KHZ,
+    Ch341I2CAdapter,
+    Ch347I2CAdapter,
+    I2CAdapter,
+)
 from src.ui.i18n import I18nManager
 
 
@@ -71,7 +76,6 @@ class I2CPanel(QGroupBox):
         self._busy = False
         self._last_read_base = 0
         self._eeprom_manager = EEPROMManager(eeprom_dir)
-        self._unavailable = "" if adapter is not None else Ch347I2CAdapter.unavailable_reason()
         self.init_ui()
         self.retranslate_ui()
         self._sync_controls()
@@ -83,6 +87,12 @@ class I2CPanel(QGroupBox):
 
         # 设备栏
         device_row = QHBoxLayout()
+        self.backend_label = QLabel()
+        device_row.addWidget(self.backend_label)
+        self.backend_combo = QComboBox()
+        self.backend_combo.addItem("CH347", "ch347")
+        self.backend_combo.addItem("CH341", "ch341")
+        device_row.addWidget(self.backend_combo)
         self.device_label = QLabel()
         device_row.addWidget(self.device_label)
         self.device_spin = QSpinBox()
@@ -186,6 +196,7 @@ class I2CPanel(QGroupBox):
     def retranslate_ui(self):
         tr = self.i18n.tr
         self.setTitle(tr("group_i2c"))
+        self.backend_label.setText(tr("i2c_backend"))
         self.device_label.setText(tr("i2c_device_index"))
         self.speed_label.setText(tr("i2c_speed"))
         for index, khz in enumerate(I2C_SPEEDS_KHZ):
@@ -208,14 +219,26 @@ class I2CPanel(QGroupBox):
 
     # ─── 状态 ───────────────────────────────────────────
 
+    def _selected_backend(self) -> str:
+        return self.backend_combo.currentData() or "ch347"
+
+    def _backend_reason(self) -> str:
+        """所选后端的不可用原因；注入了适配器（测试/仿真）时视为可用"""
+        if self._adapter is not None:
+            return ""
+        backend = self._selected_backend()
+        adapter_cls = Ch347I2CAdapter if backend == "ch347" else Ch341I2CAdapter
+        return adapter_cls.unavailable_reason()
+
     def _show_status(self, extra: str = ""):
         tr = self.i18n.tr
+        reason = self._backend_reason()
         if self._busy:
             text = tr("i2c_status_busy")
         elif self._adapter is not None and self._adapter.is_connected():
             text = f"{tr('i2c_status_open')} | {self._adapter.get_info()}"
-        elif self._unavailable:
-            text = tr("i2c_unavailable") + self._unavailable
+        elif reason:
+            text = tr("i2c_unavailable") + reason
         else:
             text = tr("i2c_status_closed")
         if extra:
@@ -224,10 +247,11 @@ class I2CPanel(QGroupBox):
 
     def _sync_controls(self):
         connected = self._adapter is not None and self._adapter.is_connected()
-        can_open = not self._busy and not self._unavailable and not connected
+        can_open = not self._busy and not self._backend_reason() and not connected
         self.open_btn.setEnabled(can_open)
         self.close_btn.setEnabled(connected and not self._busy)
         self.device_spin.setEnabled(not connected and not self._busy)
+        self.backend_combo.setEnabled(not connected and not self._busy)
         # 档位只在连接前选：CH347 的 i2c_set 在传输中切换会打断时序
         self.speed_combo.setEnabled(not connected and not self._busy)
         page_write = (
@@ -355,8 +379,10 @@ class I2CPanel(QGroupBox):
         self._run("verify", lambda: ops.verify(device, 0, payload))
 
     def _open_device(self):
+        backend = self._selected_backend()
         if self._adapter is None:
-            self._adapter = Ch347I2CAdapter(self.device_spin.value())
+            index = self.device_spin.value()
+            self._adapter = Ch347I2CAdapter(index) if backend == "ch347" else Ch341I2CAdapter(index)
         adapter = self._adapter
         speed = I2C_SPEEDS_KHZ[self.speed_combo.currentIndex()]
 

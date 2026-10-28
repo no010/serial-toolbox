@@ -14,7 +14,13 @@ from src.core.eeprom import (
     EEPROMManager,
     EEPROMOperations,
 )
-from src.core.i2c_bus import I2C_SPEEDS_KHZ, Ch347I2CAdapter, I2CError, SimulationAdapter
+from src.core.i2c_bus import (
+    I2C_SPEEDS_KHZ,
+    Ch341I2CAdapter,
+    Ch347I2CAdapter,
+    I2CError,
+    SimulationAdapter,
+)
 
 
 class FakeCh347:
@@ -264,3 +270,106 @@ def test_unknown_json_fields_are_ignored(tmp_path):
     )
     model = EEPROMManager(tmp_path).get("24c16")
     assert model is not None and model.size_bytes == 2048
+
+
+# ─── CH341 后端（厂商 DLL 替身，无硬件）────────────────────
+
+
+def _ch341(stub, monkeypatch):
+    from src.core import i2c_bus
+
+    monkeypatch.setattr(i2c_bus, "load_ch341_dll", lambda path=None: stub)
+    adapter = Ch341I2CAdapter()
+    adapter.open()
+    return adapter
+
+
+def test_ch341_open_applies_speed_and_connects(stub_ch341, monkeypatch):
+    stub = stub_ch341()
+    adapter = _ch341(stub, monkeypatch)
+
+    assert stub.opened and adapter.is_connected()
+    assert stub.speed_mode == 1  # 100 kHz → CH341SetStream 模式 1
+    assert "CH341" in adapter.get_info() and adapter.supports_eeprom_page_write()
+
+    adapter.set_speed(400)
+    assert stub.speed_mode == 2
+    adapter.close()
+    assert stub.closed and not adapter.is_connected()
+
+
+def test_ch341_missing_dll_reports_reason(stub_ch341, monkeypatch):
+    from src.core import i2c_bus
+
+    monkeypatch.setattr(i2c_bus, "load_ch341_dll", lambda path=None: None)
+    adapter = Ch341I2CAdapter()
+    with pytest.raises(I2CError, match="CH341"):
+        adapter.open()
+
+
+def test_ch341_scan_probes_and_filters_nack(stub_ch341, monkeypatch):
+    stub = stub_ch341(present=(0x50, 0x68))
+    adapter = _ch341(stub, monkeypatch)
+
+    assert adapter.scan() == [0x50, 0x68]
+    first_frame, first_read = stub.calls[0]
+    assert first_frame == bytes([0x08 << 1])  # 从 0x08 开始逐个探测，写地址字节
+    assert first_read == 1
+
+
+def test_ch341_read_builds_header_and_returns_data(stub_ch341, monkeypatch):
+    stub = stub_ch341()
+    adapter = _ch341(stub, monkeypatch)
+
+    data = adapter.read(0x50, 0x1234, 4, addr_width=2)
+    assert data == b"\xa5" * 4
+    frame, read_len = stub.calls[-1]
+    assert frame == bytes([0x50 << 1 | 1, 0x12, 0x34])
+    assert read_len == 4
+
+
+def test_ch341_read_chunks_large_transfers(stub_ch341, monkeypatch):
+    stub = stub_ch341()
+    adapter = _ch341(stub, monkeypatch)
+
+    data = adapter.read(0x50, 0, 1500, addr_width=2)
+    assert len(data) == 1500
+    headers = [(frame, read_len) for frame, read_len in stub.calls]
+    assert headers[0] == (bytes([0xA1, 0x00, 0x00]), 1024)
+    assert headers[1] == (bytes([0xA1, 0x04, 0x00]), 476)
+
+
+def test_ch341_write_chunks_and_prefixes_header(stub_ch341, monkeypatch):
+    stub = stub_ch341()
+    adapter = _ch341(stub, monkeypatch)
+
+    adapter.write(0x50, 0, bytes(range(256)) * 3, addr_width=2)  # 768 字节
+    first, second = stub.calls[-2], stub.calls[-1]
+    assert first[0][:3] == bytes([0xA0, 0x00, 0x00]) and len(first[0]) == 3 + 512
+    assert second[0][:3] == bytes([0xA0, 0x02, 0x00]) and len(second[0]) == 3 + 256
+    assert first[1] == second[1] == 0
+
+
+def test_ch341_validation_and_closed_guard(stub_ch341, monkeypatch):
+    adapter = Ch341I2CAdapter()
+    with pytest.raises(I2CError, match="未打开"):
+        adapter.scan()
+
+    ready = _ch341(stub_ch341(), monkeypatch)
+    with pytest.raises(I2CError, match="7 位"):
+        ready.read(0x80, 0, 1)
+    with pytest.raises(I2CError, match="1 或 2 字节"):
+        ready.read(0x50, 0, 1, addr_width=3)
+    with pytest.raises(I2CError, match="负"):
+        ready.read(0x50, 0, -1)
+    with pytest.raises(I2CError, match="不支持"):
+        ready.set_speed(200)
+
+
+def test_ch341_failed_stream_raises(stub_ch341, monkeypatch):
+    stub = stub_ch341(stream_ok=False)
+    adapter = _ch341(stub, monkeypatch)
+    with pytest.raises(I2CError, match="读取失败"):
+        adapter.read(0x50, 0, 1)
+    with pytest.raises(I2CError, match="写入失败"):
+        adapter.write(0x50, 0, b"\x01")

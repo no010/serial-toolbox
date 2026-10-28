@@ -18,12 +18,15 @@
 - pyserial (串口通信)
 - pyqtgraph (实时绘图，预留接口)
 
-### I2C 硬件扩展（CH347）
-- 基于 [ch347-py](https://github.com/pengwon/ch347-py)（MIT）调用沁恒官方库：
-  总线扫描、寄存器读写、24C02/24C08/24C256 EEPROM 整片读写与校验；在
-  `~/.serial-toolbox/eeprom/` 放 JSON 可追加/覆盖 EEPROM 型号（字段同 I2CTool）
-- **Windows** 需先安装 WCH 的 CH347 驱动；**Linux** 需装 WCH 的 `ch34x_pis` 驱动与
-  `libch347.so`（步骤见 ch347-py README）；**macOS** 无官方库，面板显示不可用
+### I2C 硬件扩展（CH347 / CH341）
+- 基于 [ch347-py](https://github.com/pengwon/ch347-py)（MIT）调用沁恒官方库：CH347 支持
+  总线扫描、寄存器读写、24C02/24C08/24C256 EEPROM 整片读写与校验；CH341 后端移植自
+  [I2CTool](https://github.com/no010/I2CTool)（MIT），走 WCH 的 `CH341DLL.dll`
+- 在 `~/.serial-toolbox/eeprom/` 放 JSON 可追加/覆盖 EEPROM 型号（字段同 I2CTool）
+- **CH347**：Windows 需装 WCH 的 CH347 驱动（DLL 随 ch347-py 分发）；Linux 需 `ch34x_pis`
+  驱动与 `libch347.so`；macOS 无官方库
+- **CH341**：仅 Windows。`CH341DLL.dll` 不由本仓库分发，放到程序目录，或用环境变量
+  `I2CTOOL_CH341_DLL` 指定完整路径
 - 第三方许可见 [THIRD_PARTY.md](THIRD_PARTY.md)
 
 ## 环境要求
