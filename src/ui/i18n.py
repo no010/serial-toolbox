@@ -151,6 +151,7 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         # I2C 调试
         "tab_i2c": "🔌 I2C 调试",
         "group_i2c": "I2C 调试 (CH347)",
+        "i2c_backend": "设备类型:",
         "i2c_device_index": "设备编号:",
         "i2c_speed": "速率:",
         "i2c_open": "打开设备",
@@ -486,6 +487,7 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         # I2C
         "tab_i2c": "🔌 I2C",
         "group_i2c": "I2C Debug (CH347)",
+        "i2c_backend": "Backend:",
         "i2c_device_index": "Device index:",
         "i2c_speed": "Speed:",
         "i2c_open": "Open Device",

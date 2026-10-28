@@ -223,3 +223,51 @@ def test_eeprom_buttons_require_page_write_support(qapp, tmp_path):
     assert not p.write_full_btn.isEnabled()
     assert not p.verify_btn.isEnabled()
     p.deleteLater()
+
+
+# ─── CH347 / CH341 后端切换 ─────────────────────────────────
+
+
+def test_ch341_backend_opens_and_scans(qapp, tmp_path, monkeypatch, stub_ch341):
+    from src.core import i2c_bus
+
+    dll = stub_ch341(present=(0x50,))
+    monkeypatch.setattr(i2c_bus, "load_ch341_dll", lambda path=None: dll)
+
+    p = I2CPanel(eeprom_dir=tmp_path)
+    p.backend_combo.setCurrentIndex(1)
+    assert p.backend_combo.currentData() == "ch341"
+    _open(p)
+    assert p._adapter is not None and "CH341" in p._adapter.get_info()
+
+    p._scan_bus()
+    assert _wait_for(lambda: not p._busy)
+    items = []
+    for i in range(p.address_list.count()):
+        item = p.address_list.item(i)
+        assert item is not None
+        items.append(item.text())
+    assert items == ["0x50"]
+    p._close_device()
+    p.deleteLater()
+
+
+def test_ch341_unavailable_disables_open(qapp, tmp_path, monkeypatch):
+    from src.core import i2c_bus
+
+    monkeypatch.setattr(i2c_bus, "load_ch341_dll", lambda path=None: None)
+    p = I2CPanel(eeprom_dir=tmp_path)
+    p.backend_combo.setCurrentIndex(1)
+    p._show_status()
+    p._sync_controls()
+
+    assert not p.open_btn.isEnabled()
+    assert "不可用" in p.status_label.text()
+
+
+def test_backend_combo_locked_while_connected(qapp, tmp_path):
+    p = I2CPanel(adapter=SimulationAdapter(), eeprom_dir=tmp_path)
+    assert p.backend_combo.isEnabled()
+    _open(p)
+    assert not p.backend_combo.isEnabled()
+    p.deleteLater()

@@ -16,7 +16,7 @@
 - 数据曲线图：通道可绑定原始字节流 / 协议字段 / Modbus 寄存器，支持时间轴、XY 李萨如、冻结、光标测量、CSV 导出
 - Python 脚本引擎（`send` / `wait_response` / 断点：编辑器行号槽点击打/撤，暂停、单步、跨运行存活）
 - 多串口对比、数据导出、日志轮转、主题切换（亮/暗，持久化）、国际化（中/英，运行时切换并持久化）
-- I2C 调试（CH347 USB 桥）：总线扫描、寄存器读写、24 系列 EEPROM 整片读写与校验
+- I2C 调试（CH347 / CH341 USB 桥）：总线扫描、寄存器读写、24 系列 EEPROM 整片读写与校验
 
 ---
 
@@ -28,7 +28,7 @@
 | 项目管理 | `pyproject.toml` + `uv.lock`（锁定依赖，可复现） |
 | 可执行文件 | `dist/serial-toolbox.exe`（Windows x64，PyInstaller onefile，约 52 MB） |
 | 打包配方 | `serial-toolbox.spec`（PyInstaller 构建脚本） |
-| 测试套件 | `tests/`（174 用例，pytest） |
+| 测试套件 | `tests/`（185 用例，pytest） |
 | CI 流水线 | `.github/workflows/ci.yml`（ruff + ty 类型检查 + pytest + Windows 打包冒烟） |
 | 文档 | `README.md`、本文件 |
 
@@ -40,8 +40,9 @@
 
 - 运行 exe：**Windows 10/11 x64**，无需安装 Python。
 - 从源码运行 / 构建：[Python 3.10+](https://www.python.org/downloads/) + [uv](https://docs.astral.sh/uv/)。
-- I2C 功能（可选）：CH347 USB 桥 + **WCH 官方驱动**。Windows 装厂商驱动即可（`ch347-py`
-  已随包带 `CH347DLLA64.DLL`）；Linux 需 `ch34x_pis` 驱动与 `libch347.so`；macOS 无官方库。
+- I2C 功能（可选）：**WCH 官方驱动**。CH347：Windows 装厂商驱动即可（`ch347-py` 已随包带
+  `CH347DLLA64.DLL`），Linux 需 `ch34x_pis` 驱动与 `libch347.so`；CH341：仅 Windows，
+  需自备 `CH341DLL.dll`（放程序目录或设 `I2CTOOL_CH341_DLL`）；macOS 两者都不可用。
 
 ---
 
@@ -74,7 +75,7 @@ uv run pyinstaller serial-toolbox.spec --noconfirm --clean
 
 | 项 | 状态 |
 |----|------|
-| 自动化测试 | `uv run pytest` → **174 passed**（协议解析器往返 / 导出 / 配置 / 日志 / 脚本引擎长度与残帧与缩进块与暂停单步与断点 / 图表通道模型与视图 / I2C 适配层与 EEPROM 分页读写 / UI 面板与行号槽与 I2C 面板与线程编组 / pyserial 传输端到端） |
+| 自动化测试 | `uv run pytest` → **185 passed**（协议解析器往返 / 导出 / 配置 / 日志 / 脚本引擎长度与残帧与缩进块与暂停单步与断点 / 图表通道模型与视图 / I2C 适配层与 EEPROM 分页读写 / UI 面板与行号槽与 I2C 面板与线程编组 / pyserial 传输端到端） |
 | 静态检查 | `uv run ruff check src/ tests/` → **All checks passed** |
 | 代码格式 | `uv run ruff format --check .` → **已统一**（ruff 默认风格；CI 与 pre-commit 均已锁定） |
 | 类型检查 | `uv run ty check src/ tests/` → **All checks passed**（51 处诊断已全部修复；门禁范围含 tests/）；交叉验证 `pyright src/ tests/` → **0 error** |
@@ -114,7 +115,7 @@ uv run ruff format .             # 就地格式化（CI 里跑的是 --check，�
     下都清晰可读（不再白字白底）；重启后保持上次选择。
 11. **语言**：设置 → 语言 → 中文/English 即时切换，菜单、面板、对话框与状态栏整体换语言；
     重启后保持上次选择。
-12. **I2C（需 CH347 硬件）**：插上 CH347 → I2C 调试页「打开设备」→「扫描总线」列出从机地址 →
+12. **I2C（需 CH347 或 CH341 硬件）**：选好设备类型 →「打开设备」→「扫描总线」列出从机地址 →
     点地址回填设备地址 → 对 24C02 读一个寄存器、写几个字节后读回一致；选 24C02「读取整片」
     显示 256 字节 → 把 256 字节 hex 填入数据框「写入整片」→「校验」通过；未接从机时应报
     「无应答」而不是静默成功。在 `~/.serial-toolbox/eeprom/` 放一个 `24c64.json` 重启后，
@@ -128,16 +129,18 @@ uv run ruff format .             # 就地格式化（CI 里跑的是 --check，�
 
 - **代码签名**：exe 未签名，Windows SmartScreen 可能提示；正式发布建议代码签名。
 - **测试覆盖**：已覆盖核心解析器往返、导出、配置、日志、脚本引擎（含断点跨运行存活）、图表通道、
-  I2C 适配层与 EEPROM 分页读写（仿真总线）、i18n 与 UI 构造（174 用例），
-  含 pyserial socket 传输的真实收发端到端测试；CH347 只验到适配器的帧构造层，真机路径需人工确认。
+  I2C 适配层与 EEPROM 分页读写（仿真总线）、i18n 与 UI 构造（185 用例），
+  含 pyserial socket 传输的真实收发端到端测试；CH347/CH341 只验到适配器的帧构造层（厂商 DLL 用替身），
+  真机路径需人工确认。
 - **断点粒度**：脚本按顶层语句切分执行（缩进块必须整体交给 `exec`），块内断点是在整块开始
   执行前停下，做不到逐行停下；需要更细粒度得改用 `sys.settrace`。
 - **断点不随会话持久化**：行号槽断点存在引擎内存里，重启程序后需重新点击设置。
 - **图表 Y 轴**：通道可分属左/右两条 Y 轴（通道属性里选择），但每条轴仍只有一条量程，
   同轴上量级差大的通道混画仍会互相压平；右轴通道暂不进图例（通道栏有色块可辨认）。通道上限 8 条。
 - **跨平台打包**：当前仅构建 Windows exe；macOS/Linux 需在对应平台分别打包。
-- **I2C 仅 CH347**：面板只支持 CH347 USB 桥（ch347-py 的厂商库只发 Windows/Linux），
-  macOS 不可用；SPI/GPIO 尚未接入面板。CH341 后端待上游 i2ctool 实现推送后再移植。
+- **I2C 硬件**：CH347（Windows/Linux）与 CH341（仅 Windows）两种后端可选；macOS 都不可用，
+  SPI/GPIO 尚未接入面板。CH341 的 `CH341DLL.dll` 不由本仓库分发，需放程序目录或设置
+  `I2CTOOL_CH341_DLL`，缺失时面板显示不可用并给出提示。
 - **EEPROM 型号**：内置 24C02/24C08/24C256，可在 `~/.serial-toolbox/eeprom/` 放 JSON
   追加新型号或按 `id` 覆盖内置（字段同 I2CTool：`id/name/size_bytes/address_width/
   page_size/write_cycle_ms/notes`），改完重启生效。

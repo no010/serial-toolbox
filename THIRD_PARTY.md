@@ -14,14 +14,18 @@
 
 ## I2CTool
 
-- 来源：https://github.com/pengwon/I2CTool
+- 来源：https://github.com/no010/I2CTool
+- 版本：CH341 适配器取自 commit `71f032e`
 - 许可：MIT，Copyright (c) 2025 Peter
-- 使用方式：`src/core/eeprom.py` 的 EEPROM 型号 JSON 描述（`id/name/size_bytes/
-  address_width/page_size/write_cycle_ms/notes`，与该项目 `configs/eeprom/*.json`
-  同构）与读写流程（随机/顺序读、按页写、写周期等待、校验、整片擦除）移植自该项目的
-  `i2ctool_core/`；`I2CAdapter` 接口形状（`open/close/is_connected/scan/read/write/
-  set_speed/supports_eeprom_page_write/get_info`）与其 `interfaces.py` 保持一致。
-  本项目为 PyQt6 应用，未使用其 PySide6/Tauri 前端。
+- 使用方式：
+  - `src/core/eeprom.py` 的 EEPROM 型号 JSON 描述（`id/name/size_bytes/address_width/
+    page_size/write_cycle_ms/notes`，与该项目 `configs/eeprom/*.json` 同构）与读写流程
+    （随机/顺序读、按页写、写周期等待、校验、整片擦除）移植自该项目的 `i2ctool_core/`。
+  - `src/core/i2c_bus.py` 的 `Ch341I2CAdapter`（`CH341StreamI2C` 分块传输、四档
+    `CH341SetStream` 速率、DLL 查找顺序、地址前导校验）移植自 `adapters/ch341_adapter.py`。
+  - `I2CAdapter` 接口形状（`open/close/is_connected/scan/read/write/set_speed/
+    supports_eeprom_page_write/get_info`）与其 `interfaces.py` 保持一致。
+  - 本项目为 PyQt6 应用，未使用其 PySide6/Tauri 前端。
 
 两个上游项目的 MIT 许可全文如下：
 
