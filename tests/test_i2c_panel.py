@@ -28,9 +28,9 @@ def _wait_for(predicate, timeout: float = 5.0) -> bool:
 
 
 @pytest.fixture
-def panel(qapp):
+def panel(qapp, tmp_path):
     adapter = SimulationAdapter()
-    p = I2CPanel(adapter=adapter)
+    p = I2CPanel(adapter=adapter, eeprom_dir=tmp_path)
     yield p, adapter
     adapter.close()
     p.deleteLater()
@@ -39,7 +39,7 @@ def panel(qapp):
 def _open(p: I2CPanel):
     p._open_device()
     assert _wait_for(lambda: not p._busy), "打开设备超时"
-    assert p._adapter is not None and p._adapter.is_open
+    assert p._adapter is not None and p._adapter.is_connected()
 
 
 # ─── 解析工具 ───────────────────────────────────────────────
@@ -169,8 +169,8 @@ def test_eeprom_write_then_verify(panel):
 # ─── i18n 与不可用状态 ──────────────────────────────────────
 
 
-def test_panel_retranslates(qapp):
-    p = I2CPanel(adapter=SimulationAdapter(), i18n=None)
+def test_panel_retranslates(qapp, tmp_path):
+    p = I2CPanel(adapter=SimulationAdapter(), i18n=None, eeprom_dir=tmp_path)
     p.i18n.set_language(Language.ENGLISH)
     p.retranslate_ui()
     assert p.open_btn.text() == "Open Device"
@@ -192,4 +192,34 @@ def test_unavailable_platform_disables_open(qapp, monkeypatch):
     p = I2CPanel()
     assert "不可用" in p.status_label.text()
     assert not p.open_btn.isEnabled()
+    p.deleteLater()
+
+
+# ─── EEPROM 型号配置与能力门控 ──────────────────────────────
+
+
+def test_custom_model_from_json_appears_in_combo(qapp, tmp_path):
+    (tmp_path / "24c64.json").write_text(
+        '{"id": "24c64", "name": "24C64", "size_bytes": 8192, '
+        '"address_width": 2, "page_size": 32, "write_cycle_ms": 5}',
+        encoding="utf-8",
+    )
+    p = I2CPanel(adapter=SimulationAdapter(), eeprom_dir=tmp_path)
+    names = [p.model_combo.itemText(i) for i in range(p.model_combo.count())]
+    assert "24C64" in names
+    assert len(names) == 4
+    p.deleteLater()
+
+
+def test_eeprom_buttons_require_page_write_support(qapp, tmp_path):
+    class NoPageWrite(SimulationAdapter):
+        def supports_eeprom_page_write(self):
+            return False
+
+    p = I2CPanel(adapter=NoPageWrite(), eeprom_dir=tmp_path)
+    _open(p)
+    assert p.scan_btn.isEnabled()
+    assert not p.read_full_btn.isEnabled()
+    assert not p.write_full_btn.isEnabled()
+    assert not p.verify_btn.isEnabled()
     p.deleteLater()
