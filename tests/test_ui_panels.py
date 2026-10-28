@@ -579,3 +579,40 @@ def test_modbus_panel_func_combo_keeps_selection_on_retranslate(qapp):
     panel.retranslate_ui()
     assert panel.func_combo.currentIndex() == 3
     assert "Write Multiple" in panel.func_combo.currentText()
+
+
+# ─── 窗口位置恢复 ───────────────────────────────────────────
+
+
+def _main_window_with_geometry(monkeypatch, tmp_path, x, y, w=800, h=600):
+    from src.core.config_manager import ConfigManager
+    from src.ui.main_window import SerialToolboxMainWindow
+
+    cfg = tmp_path / "config.json"
+    cfg.write_text(
+        f'{{"window_x": {x}, "window_y": {y}, "window_w": {w}, "window_h": {h}}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(ConfigManager, "CONFIG_FILE", str(cfg))
+    return SerialToolboxMainWindow()
+
+
+def test_offscreen_saved_geometry_falls_back_to_primary_screen(qapp, monkeypatch, tmp_path):
+    """回归：扩展屏拔掉后，配置里的 x 落在屏幕外，窗口会"打开却看不见"。"""
+    from PyQt6.QtWidgets import QApplication
+
+    w = _main_window_with_geometry(monkeypatch, tmp_path, 40000, 40000)
+    geometry = w.geometry()
+    screens = QApplication.screens()
+    assert any(screen.availableGeometry().intersects(geometry) for screen in screens), geometry
+
+
+def test_onscreen_saved_geometry_is_kept(qapp, monkeypatch, tmp_path):
+    from PyQt6.QtWidgets import QApplication
+
+    primary = QApplication.primaryScreen()
+    assert primary is not None
+    area = primary.availableGeometry()
+    w = _main_window_with_geometry(monkeypatch, tmp_path, area.x() + 20, area.y() + 20)
+    assert w.geometry().topLeft().x() == area.x() + 20
+    assert w.geometry().topLeft().y() == area.y() + 20

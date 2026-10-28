@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QSplitter,
     QTableWidget,
@@ -472,6 +473,8 @@ class ScriptEditorPanel(QGroupBox):
 
     def init_ui(self):
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(4)
 
         # 示例选择
         ctrl = QHBoxLayout()
@@ -512,6 +515,9 @@ class ScriptEditorPanel(QGroupBox):
         # 代码编辑区（行号槽 + 编辑器并排放）
         self.code_edit = QPlainTextEdit()
         self.code_edit.setFont(QFont("Consolas", 10))
+        # 允许压到 40px：这页的最小高度会参与主窗口最小尺寸，小屏上会被顶出屏幕
+        self.code_edit.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+        self.code_edit.setMinimumHeight(40)
         editor_row = QHBoxLayout()
         editor_row.setContentsMargins(0, 0, 0, 0)
         editor_row.setSpacing(0)
@@ -533,6 +539,8 @@ class ScriptEditorPanel(QGroupBox):
         self.output_text.setReadOnly(True)
         self.output_text.setFont(QFont("Consolas", 9))
         self.output_text.setMaximumHeight(150)
+        self.output_text.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+        self.output_text.setMinimumHeight(40)
         layout.addWidget(self.output_text)
 
         self.script_finished.connect(self._on_engine_finished)

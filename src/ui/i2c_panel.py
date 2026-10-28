@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QVBoxLayout,
 )
@@ -84,6 +85,8 @@ class I2CPanel(QGroupBox):
 
     def init_ui(self):
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(4)
 
         # 设备栏
         device_row = QHBoxLayout()
@@ -134,6 +137,7 @@ class I2CPanel(QGroupBox):
         # 寄存器读写
         self.register_group = QGroupBox()
         register_layout = QFormLayout(self.register_group)
+        register_layout.setContentsMargins(6, 2, 6, 2)
         register_row = QHBoxLayout()
         self.device_addr_edit = QLineEdit("50")
         self.device_addr_edit.setMaximumWidth(70)
@@ -163,6 +167,7 @@ class I2CPanel(QGroupBox):
         # EEPROM
         self.eeprom_group = QGroupBox()
         eeprom_layout = QHBoxLayout(self.eeprom_group)
+        eeprom_layout.setContentsMargins(6, 2, 6, 2)
         self.model_combo = QComboBox()
         for model in self._eeprom_manager.models():
             self.model_combo.addItem(model.name, model.id)
@@ -185,8 +190,10 @@ class I2CPanel(QGroupBox):
         self.result_text = QPlainTextEdit()
         self.result_text.setReadOnly(True)
         self.result_text.setFont(QFont("Consolas", 9))
-        self.result_text.setMaximumHeight(120)
-        operations.addWidget(self.result_text)
+        # 允许随窗口缩小到 40px：否则这页的最小高度会把主窗口顶出 1366×768 一类屏幕
+        self.result_text.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+        self.result_text.setMinimumHeight(40)
+        operations.addWidget(self.result_text, 1)
         body.addLayout(operations, 1)
         layout.addLayout(body, 1)
 

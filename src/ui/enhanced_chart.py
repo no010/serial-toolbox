@@ -303,39 +303,45 @@ class EnhancedChart(QWidget):
 
         ctrl.addStretch()
 
+        # 操作类按钮单独一行：单行工具栏要 1000px，窄屏会把左栏最小宽度顶到
+        # 满屏，右栏只能拿到几十像素
+        actions = QHBoxLayout()
+
         self.autoscale_check = QCheckBox()
         self.autoscale_check.setChecked(True)
         self.autoscale_check.stateChanged.connect(self._toggle_autoscale)
-        ctrl.addWidget(self.autoscale_check)
+        actions.addWidget(self.autoscale_check)
 
         self.grid_check = QCheckBox()
         self.grid_check.setChecked(True)
         self.grid_check.stateChanged.connect(self._toggle_grid)
-        ctrl.addWidget(self.grid_check)
+        actions.addWidget(self.grid_check)
 
         self.collect_check = QCheckBox()
         self.collect_check.setChecked(True)
         self.collect_check.toggled.connect(self.set_collect_enabled)
-        ctrl.addWidget(self.collect_check)
+        actions.addWidget(self.collect_check)
 
         self.freeze_btn = QPushButton()
         self.freeze_btn.setCheckable(True)
         self.freeze_btn.toggled.connect(self._on_frozen)
-        ctrl.addWidget(self.freeze_btn)
+        actions.addWidget(self.freeze_btn)
 
         self.export_btn = QPushButton()
         self.export_btn.clicked.connect(self._export_via_dialog)
-        ctrl.addWidget(self.export_btn)
+        actions.addWidget(self.export_btn)
 
         self.clear_btn = QPushButton()
         self.clear_btn.clicked.connect(self.clear)
-        ctrl.addWidget(self.clear_btn)
+        actions.addWidget(self.clear_btn)
 
         self.add_channel_btn = QPushButton()
         self.add_channel_btn.clicked.connect(self._add_channel_interactive)
-        ctrl.addWidget(self.add_channel_btn)
+        actions.addWidget(self.add_channel_btn)
+        actions.addStretch()
 
         layout.addLayout(ctrl)
+        layout.addLayout(actions)
 
         self.channel_bar = QHBoxLayout()
         self.channel_bar_label = QLabel()
