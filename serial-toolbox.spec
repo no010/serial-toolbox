@@ -1,15 +1,23 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 # main.py 之外还有大量“方法内运行时导入”（protocol_plugin._register_*、
-# script_engine 等），静态分析无法发现，必须显式收集 src 与 pyqtgraph 全部子模块。
-hiddenimports = collect_submodules('src') + collect_submodules('pyqtgraph')
+# script_engine、i2c_bus 的 ch347 等），静态分析无法发现，必须显式收集。
+hiddenimports = (
+    collect_submodules('src')
+    + collect_submodules('pyqtgraph')
+    + collect_submodules('ch347')
+)
+
+# ch347-py 按包内相对路径加载厂商 DLL（适配器显式传 dll_path），
+# 因此要原样落到 ch347/lib/ 下，不能只当普通二进制丢到根目录。
+ch347_data = collect_data_files('ch347', includes=['lib/*.DLL', 'include/*.H'])
 
 a = Analysis(
     ['main.py'],
     pathex=['.'],
     binaries=[],
-    datas=[],
+    datas=ch347_data,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},

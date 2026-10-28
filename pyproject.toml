@@ -24,6 +24,8 @@ dependencies = [
     "pyserial>=3.5",
     "pyqtgraph>=0.13.3",
     "numpy>=1.24.0",
+    # CH347 USB-I2C/SPI 桥的厂商 DLL 封装；作者未发 PyPI，锁 commit 取 git 源
+    "ch347-py @ git+https://github.com/pengwon/ch347-py@352384216832f8ae358e84859612480990c394ff",
 ]
 
 # 开发依赖组：uv sync --group dev
@@ -49,8 +51,12 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
 
+# ch347-py 未发 PyPI，依赖里用了 git 直接引用
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [tool.hatch.build.targets.sdist]
-include = ["src", "main.py", "README.md"]
+include = ["src", "main.py", "README.md", "LICENSE", "THIRD_PARTY.md"]
 
 # ── 工具链配置 ─────────────────────────────────────────────
 [tool.ruff]

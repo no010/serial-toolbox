@@ -308,6 +308,20 @@ def test_main_window_has_no_dead_chart_class(qapp):
     assert not hasattr(main_window, "RealtimeChart")
 
 
+def test_main_window_has_i2c_tab_and_retranslates(qapp):
+    from src.ui.i18n import Language
+    from src.ui.main_window import SerialToolboxMainWindow
+
+    w = SerialToolboxMainWindow()
+    titles = [w.receive_tabs.tabText(i) for i in range(w.receive_tabs.count())]
+    assert any("I2C" in title for title in titles), f"缺少 I2C 页签: {titles}"
+    assert w.i2c_panel.isEnabled()
+
+    w.i18n.set_language(Language.ENGLISH)
+    w.retranslate_ui()
+    assert w.i2c_panel.open_btn.text() == "Open Device"
+
+
 class _FakeFrame:
     def __init__(self, fields, raw=b"\x01\x02"):
         self.fields = fields
