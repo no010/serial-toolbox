@@ -271,13 +271,19 @@ class ThemeManager:
                 color: {theme.text_primary};
                 border: 1px solid {theme.border};
                 alternate-background-color: {theme.surface_variant};
-            }}
-            QListWidget::item, QListView::item {{
+            }}            QListWidget::item, QListView::item {{
                 padding: 3px;
             }}
             QListWidget::item:selected, QListView::item:selected {{
                 background-color: {theme.table_selected_bg};
                 color: {theme.table_selected_text};
+            }}
+            QScrollArea {{
+                background-color: transparent;
+                border: none;
+            }}
+            QScrollArea > QWidget > QWidget {{
+                background-color: transparent;
             }}
             QHeaderView::section {{
                 background-color: {theme.surface_variant};

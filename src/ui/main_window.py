@@ -7,14 +7,16 @@ v3.0 - 新增: Modbus解析、日志轮转、脚本引擎、多串口对比
 import sys
 from datetime import datetime
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QRect, Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QAction, QCloseEvent, QFont, QTextCursor
 from PyQt6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -24,6 +26,7 @@ from PyQt6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QSplitter,
     QTableWidget,
@@ -294,6 +297,7 @@ class SerialToolboxMainWindow(QMainWindow):
         # 配置管理
         self.config_mgr = ConfigManager()
         self.app_config = self.config_mgr.load()
+        self._geometry_settled = False
 
         # 主题（亮/暗），选择持久化在配置里
         self.theme_mgr = ThemeManager()
@@ -336,14 +340,75 @@ class SerialToolboxMainWindow(QMainWindow):
         self.status_timer.timeout.connect(self.update_status)
         self.status_timer.start(1000)
 
-    def init_ui(self):
-        """初始化 UI"""
-        self.setGeometry(
+    def _restore_geometry(self):
+        """
+        恢复上次窗口位置，但只在它还能落在某块屏幕上时采用。
+
+        配置可能来自已拔掉的扩展屏（x 落在当前屏幕之外），直接 setGeometry 会
+        得到一个"打开却看不见"的窗口；此时退回主屏居中。
+        """
+        saved = QRect(
             self.app_config.window_x,
             self.app_config.window_y,
             self.app_config.window_w,
             self.app_config.window_h,
         )
+        screens = QApplication.screens()
+        if any(screen.availableGeometry().intersects(saved) for screen in screens):
+            self.setGeometry(saved)
+            return
+
+        primary = QApplication.primaryScreen()
+        if primary is None:
+            self.setGeometry(saved)
+            return
+        area = primary.availableGeometry()
+        width = min(saved.width(), area.width())
+        height = min(saved.height(), area.height())
+        self.setGeometry(
+            area.x() + (area.width() - width) // 2,
+            area.y() + (area.height() - height) // 2,
+            width,
+            height,
+        )
+
+    def showEvent(self, a0):
+        super().showEvent(a0)
+        if not self._geometry_settled:
+            self._geometry_settled = True
+            self._fit_frame_on_screen()
+            # 分割器首次布局按 sizeHint 分配，右栏会被压到最小宽度；
+            # 等这一轮布局结束再按 6:4 分一次
+            QTimer.singleShot(0, self._apply_splitter_sizes)
+
+    def _apply_splitter_sizes(self):
+        total = self.main_splitter.width()
+        if total <= 0:
+            return
+        left = int(total * 0.62)
+        self.main_splitter.setSizes([left, total - left])
+
+    def _fit_frame_on_screen(self):
+        """显示后按真实边框修正位置：窗口框架（标题栏）必须留在屏内"""
+        screen = QApplication.screenAt(self.geometry().center()) or QApplication.primaryScreen()
+        if screen is None:
+            return
+        area = screen.availableGeometry()
+        frame = self.frameGeometry()
+        if frame.top() < area.top():
+            self.move(self.x(), self.y() + (area.top() - frame.top()))
+        frame = self.frameGeometry()
+        overflow_bottom = frame.bottom() - area.bottom()
+        if overflow_bottom > 0:
+            self.resize(self.width(), self.height() - overflow_bottom)
+        frame = self.frameGeometry()
+        overflow_right = frame.right() - area.right()
+        if overflow_right > 0:
+            self.resize(self.width() - overflow_right, self.height())
+
+    def init_ui(self):
+        """初始化 UI"""
+        self._restore_geometry()
 
         # 创建菜单栏
         self.create_menu_bar()
@@ -366,6 +431,8 @@ class SerialToolboxMainWindow(QMainWindow):
         splitter.addWidget(self.create_receive_tabs())
 
         # 右侧: 发送区 + 预设 + Modbus
+        # 套一层滚动区：这栏是高瘦工具堆叠，小屏（1440×900 及以下）塞不下时
+        # 不该把整个主窗口的最小高度顶出屏幕，出滚动条即可
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
@@ -375,8 +442,18 @@ class SerialToolboxMainWindow(QMainWindow):
         right_layout.addWidget(self.modbus_panel)
         right_layout.addStretch()
 
-        splitter.addWidget(right_panel)
-        splitter.setSizes([600, 400])
+        right_scroll = QScrollArea()
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # 滚动区的 minimumSizeHint 很小，不给下限的话分割器会把整栏压成一条缝
+        right_scroll.setMinimumWidth(320)
+        right_scroll.setWidget(right_panel)
+
+        splitter.addWidget(right_scroll)
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 2)
+        self.main_splitter = splitter
         main_layout.addWidget(splitter, 1)
 
         # 底部: 脚本编辑器 + 多串口对比 (Tab)
