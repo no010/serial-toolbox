@@ -40,14 +40,13 @@ class _Ch347Device(Protocol):
 
 @runtime_checkable
 class I2CAdapter(Protocol):
-    """总线适配器契约"""
+    """总线适配器契约（方法名与 I2CTool 的 I2CAdapter 保持一致）"""
 
     def open(self) -> None: ...
 
     def close(self) -> None: ...
 
-    @property
-    def is_open(self) -> bool: ...
+    def is_connected(self) -> bool: ...
 
     def scan(self) -> list[int]: ...
 
@@ -56,6 +55,10 @@ class I2CAdapter(Protocol):
     def write(self, device_addr: int, mem_addr: int, data: bytes, addr_width: int = 1) -> None: ...
 
     def set_speed(self, khz: int) -> None: ...
+
+    def supports_eeprom_page_write(self) -> bool: ...
+
+    def get_info(self) -> str: ...
 
 
 class Ch347I2CAdapter:
@@ -102,8 +105,7 @@ class Ch347I2CAdapter:
             raise I2CError("设备未打开")
         return self._device
 
-    @property
-    def is_open(self) -> bool:
+    def is_connected(self) -> bool:
         return self._device is not None
 
     def open(self) -> None:
@@ -183,7 +185,10 @@ class Ch347I2CAdapter:
         )
         self._stream(write_data, 0)
 
-    def info(self) -> str:
+    def supports_eeprom_page_write(self) -> bool:
+        return True
+
+    def get_info(self) -> str:
         if self._device is None:
             return "CH347 (未打开)"
         return f"CH347 #{self._device_index} @ {self._speed_khz} kHz"
@@ -204,6 +209,7 @@ class SimulationAdapter:
         self._memory = bytearray(0x10000)
         self._speed_khz = 100
         self._speeds = speeds_khz
+        self._bus = ""
 
     def open(self) -> None:
         self._open = True
@@ -211,9 +217,15 @@ class SimulationAdapter:
     def close(self) -> None:
         self._open = False
 
-    @property
-    def is_open(self) -> bool:
+    def is_connected(self) -> bool:
         return self._open
+
+    def set_bus(self, bus: str):
+        """指定仿真总线名（与 i2ctool 的 set_bus 同义，仅用于展示）"""
+        self._bus = bus
+
+    def supports_eeprom_page_write(self) -> bool:
+        return True
 
     def set_speed(self, khz: int) -> None:
         if khz not in self._speeds:
@@ -246,5 +258,6 @@ class SimulationAdapter:
             raise I2CError(f"内部地址越界: {mem_addr:#x}+{len(data)}")
         self._memory[mem_addr:end] = data
 
-    def info(self) -> str:
-        return f"仿真 I2C @ {self._speed_khz} kHz"
+    def get_info(self) -> str:
+        bus = f" @ {self._bus}" if self._bus else ""
+        return f"仿真 I2C{bus} @ {self._speed_khz} kHz"

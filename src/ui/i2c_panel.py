@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from src.core.eeprom import BUILTIN_EEPROM_MODELS, EEPROMOperations
+from src.core.eeprom import EEPROMManager, EEPROMOperations
 from src.core.i2c_bus import I2C_SPEEDS_KHZ, Ch347I2CAdapter, I2CAdapter
 from src.ui.i18n import I18nManager
 
@@ -59,12 +59,18 @@ class I2CPanel(QGroupBox):
     operation_done = pyqtSignal(str, object)
     operation_failed = pyqtSignal(str, str)
 
-    def __init__(self, i18n: I18nManager | None = None, adapter: I2CAdapter | None = None):
+    def __init__(
+        self,
+        i18n: I18nManager | None = None,
+        adapter: I2CAdapter | None = None,
+        eeprom_dir: str | None = None,
+    ):
         self.i18n = i18n or I18nManager()
         super().__init__()
         self._adapter: I2CAdapter | None = adapter
         self._busy = False
         self._last_read_base = 0
+        self._eeprom_manager = EEPROMManager(eeprom_dir)
         self._unavailable = "" if adapter is not None else Ch347I2CAdapter.unavailable_reason()
         self.init_ui()
         self.retranslate_ui()
@@ -148,8 +154,8 @@ class I2CPanel(QGroupBox):
         self.eeprom_group = QGroupBox()
         eeprom_layout = QHBoxLayout(self.eeprom_group)
         self.model_combo = QComboBox()
-        for model in BUILTIN_EEPROM_MODELS:
-            self.model_combo.addItem(model.name, model.eeprom_id)
+        for model in self._eeprom_manager.models():
+            self.model_combo.addItem(model.name, model.id)
         eeprom_layout.addWidget(self.model_combo)
         self.read_full_btn = QPushButton()
         self.read_full_btn.clicked.connect(self._read_full)
@@ -206,8 +212,8 @@ class I2CPanel(QGroupBox):
         tr = self.i18n.tr
         if self._busy:
             text = tr("i2c_status_busy")
-        elif self._adapter is not None and self._adapter.is_open:
-            text = tr("i2c_status_open")
+        elif self._adapter is not None and self._adapter.is_connected():
+            text = f"{tr('i2c_status_open')} | {self._adapter.get_info()}"
         elif self._unavailable:
             text = tr("i2c_unavailable") + self._unavailable
         else:
@@ -217,22 +223,20 @@ class I2CPanel(QGroupBox):
         self.status_label.setText(text)
 
     def _sync_controls(self):
-        connected = self._adapter is not None and self._adapter.is_open
+        connected = self._adapter is not None and self._adapter.is_connected()
         can_open = not self._busy and not self._unavailable and not connected
         self.open_btn.setEnabled(can_open)
         self.close_btn.setEnabled(connected and not self._busy)
         self.device_spin.setEnabled(not connected and not self._busy)
         # 档位只在连接前选：CH347 的 i2c_set 在传输中切换会打断时序
         self.speed_combo.setEnabled(not connected and not self._busy)
-        for widget in (
-            self.scan_btn,
-            self.read_btn,
-            self.write_btn,
-            self.read_full_btn,
-            self.write_full_btn,
-            self.verify_btn,
-        ):
+        page_write = (
+            connected and self._adapter is not None and (self._adapter.supports_eeprom_page_write())
+        )
+        for widget in (self.scan_btn, self.read_btn, self.write_btn):
             widget.setEnabled(connected and not self._busy)
+        for widget in (self.read_full_btn, self.write_full_btn, self.verify_btn):
+            widget.setEnabled(page_write and not self._busy)
 
     def _set_busy(self, busy: bool):
         self._busy = busy
@@ -302,7 +306,10 @@ class I2CPanel(QGroupBox):
 
     def _selected_model(self):
         model_id = self.model_combo.currentData()
-        return next(m for m in BUILTIN_EEPROM_MODELS if m.eeprom_id == model_id)
+        model = self._eeprom_manager.get(model_id) if model_id else None
+        if model is None:
+            raise ValueError(f"未知的 EEPROM 型号: {model_id}")
+        return model
 
     def _eeprom_context(self) -> tuple[EEPROMOperations, int] | None:
         if self._adapter is None:
@@ -310,10 +317,11 @@ class I2CPanel(QGroupBox):
             return None
         try:
             device = self._parse_hex(self.device_addr_edit.text())
+            model = self._selected_model()
         except ValueError as exc:
             self._show_status(self.i18n.tr("i2c_msg_failed", str(exc)))
             return None
-        return EEPROMOperations(self._adapter, self._selected_model()), device
+        return EEPROMOperations(self._adapter, model), device
 
     def _read_full(self):
         context = self._eeprom_context()

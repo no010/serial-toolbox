@@ -8,7 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from src.core.eeprom import BUILTIN_EEPROM_MODELS, EEPROMConfig, EEPROMOperations
+from src.core.eeprom import (
+    BUILTIN_EEPROM_MODELS,
+    EEPROMConfig,
+    EEPROMManager,
+    EEPROMOperations,
+)
 from src.core.i2c_bus import I2C_SPEEDS_KHZ, Ch347I2CAdapter, I2CError, SimulationAdapter
 
 
@@ -106,7 +111,17 @@ def test_address_bounds_are_validated():
 def test_close_releases_device():
     adapter, fake = _adapter_with_fake()
     adapter.close()
-    assert fake.closed and not adapter.is_open
+    assert fake.closed and not adapter.is_connected()
+
+
+def test_adapters_satisfy_contract():
+    from src.core.i2c_bus import I2CAdapter
+
+    assert isinstance(Ch347I2CAdapter(), I2CAdapter)
+    assert isinstance(SimulationAdapter(), I2CAdapter)
+    assert Ch347I2CAdapter().supports_eeprom_page_write()
+    assert "CH347" in Ch347I2CAdapter().get_info()
+    assert "仿真" in SimulationAdapter().get_info()
 
 
 def test_platform_check_and_bundled_dll():
@@ -124,7 +139,7 @@ def test_platform_check_and_bundled_dll():
 
 
 def _ops(model_id="24c02", device=0x50):
-    model = next(m for m in BUILTIN_EEPROM_MODELS if m.eeprom_id == model_id)
+    model = next(m for m in BUILTIN_EEPROM_MODELS if m.id == model_id)
     adapter = SimulationAdapter()
     adapter.open()
     waits: list[float] = []
@@ -194,3 +209,58 @@ def test_eeprom_config_validation():
         EEPROMConfig("bad", "bad", 256, 3, 8)
     with pytest.raises(ValueError):
         EEPROMConfig("bad", "bad", 0, 1, 8)
+    with pytest.raises(ValueError):
+        EEPROMConfig("", "bad", 256, 1, 8)
+
+
+# ─── EEPROM 型号配置（JSON）──────────────────────────────────
+
+
+def test_manager_loads_builtin_models(tmp_path):
+    manager = EEPROMManager(tmp_path)
+    ids = [model.id for model in manager.models()]
+    assert ids == ["24c02", "24c08", "24c256"]
+    model = manager.get("24c256")
+    assert model is not None and model.page_size == 64
+
+
+def test_user_json_adds_and_overrides_models(tmp_path):
+    (tmp_path / "24c64.json").write_text(
+        '{"id": "24c64", "name": "24C64", "size_bytes": 8192, '
+        '"address_width": 2, "page_size": 32, "write_cycle_ms": 5}',
+        encoding="utf-8",
+    )
+    (tmp_path / "24c02.json").write_text(
+        '{"id": "24c02", "name": "24C02 (custom)", "size_bytes": 256, '
+        '"address_width": 1, "page_size": 16, "write_cycle_ms": 3}',
+        encoding="utf-8",
+    )
+    manager = EEPROMManager(tmp_path)
+
+    added = manager.get("24c64")
+    overridden = manager.get("24c02")
+    assert added is not None and added.size_bytes == 8192
+    assert overridden is not None and overridden.page_size == 16  # 同名 id 以用户配置为准
+    assert len(manager.models()) == 4
+
+
+def test_invalid_json_is_skipped_without_losing_defaults(tmp_path, caplog):
+    (tmp_path / "broken.json").write_text("{not json", encoding="utf-8")
+    (tmp_path / "bad-field.json").write_text(
+        '{"id": "bad", "name": "bad", "size_bytes": -1, "address_width": 1, "page_size": 8}',
+        encoding="utf-8",
+    )
+    manager = EEPROMManager(tmp_path)
+
+    assert [m.id for m in manager.models()] == ["24c02", "24c08", "24c256"]
+    assert "跳过无效的 EEPROM 型号配置" in caplog.text
+
+
+def test_unknown_json_fields_are_ignored(tmp_path):
+    (tmp_path / "extra.json").write_text(
+        '{"id": "24c16", "name": "24C16", "size_bytes": 2048, "address_width": 1, '
+        '"page_size": 16, "future_field": 1}',
+        encoding="utf-8",
+    )
+    model = EEPROMManager(tmp_path).get("24c16")
+    assert model is not None and model.size_bytes == 2048
