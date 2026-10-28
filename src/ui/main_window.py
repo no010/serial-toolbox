@@ -51,6 +51,7 @@ from src.ui.extended_panels import (
     ScriptEditorPanel,
     _retranslate_combo,
 )
+from src.ui.i2c_panel import I2CPanel
 from src.ui.i18n import I18nManager, Language
 from src.ui.multi_port_dialog import MultiPortManagerDialog
 from src.ui.theme_manager import ThemeManager, ThemeMode
@@ -445,6 +446,7 @@ class SerialToolboxMainWindow(QMainWindow):
         self.receive_tabs.setTabText(1, tr("tab_chart"))
         self.receive_tabs.setTabText(2, tr("tab_modbus"))
         self.receive_tabs.setTabText(3, tr("tab_protocol"))
+        self.receive_tabs.setTabText(4, tr("tab_i2c"))
         self.select_protocol_label.setText(tr("label_select_protocol"))
         _retranslate_combo(
             self.protocol_combo, [tr("auto_detect")] + self.protocol_registry.list_protocols()
@@ -501,6 +503,7 @@ class SerialToolboxMainWindow(QMainWindow):
         self.modbus_response_panel.retranslate_ui()
         self.script_panel.retranslate_ui()
         self.compare_panel.retranslate_ui()
+        self.i2c_panel.retranslate_ui()
 
     def create_menu_bar(self):
         """创建菜单栏"""
@@ -758,6 +761,10 @@ class SerialToolboxMainWindow(QMainWindow):
         protocol_layout.addWidget(self.protocol_table)
 
         self.receive_tabs.addTab(protocol_widget, "")
+
+        # Tab 5: I2C 调试 (CH347 USB 桥)
+        self.i2c_panel = I2CPanel(i18n=self.i18n)
+        self.receive_tabs.addTab(self.i2c_panel, "")
 
         return self.receive_tabs
 

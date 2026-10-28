@@ -18,6 +18,13 @@
 - pyserial (串口通信)
 - pyqtgraph (实时绘图，预留接口)
 
+### I2C 硬件扩展（CH347）
+- 基于 [ch347-py](https://github.com/pengwon/ch347-py)（MIT）调用沁恒官方库：
+  总线扫描、寄存器读写、24C02/24C08/24C256 EEPROM 整片读写与校验
+- **Windows** 需先安装 WCH 的 CH347 驱动；**Linux** 需装 WCH 的 `ch34x_pis` 驱动与
+  `libch347.so`（步骤见 ch347-py README）；**macOS** 无官方库，面板显示不可用
+- 第三方许可见 [THIRD_PARTY.md](THIRD_PARTY.md)
+
 ## 环境要求
 
 - [Python 3.10+](https://www.python.org/downloads/)
