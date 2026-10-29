@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="chart glyph">
+  <title>Serial Toolbox — 波形/图表（页签版）</title>
+  <g fill="none" stroke="#34D399" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3.5 20.5h17"/>
+    <path d="M4.5 16.5 9 11l3.2 2.8L19 6"/>
+  </g>
+  <circle cx="19" cy="6" r="2.1" fill="#34D399"/>
+</svg>

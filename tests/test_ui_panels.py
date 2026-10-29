@@ -616,3 +616,10 @@ def test_onscreen_saved_geometry_is_kept(qapp, monkeypatch, tmp_path):
     w = _main_window_with_geometry(monkeypatch, tmp_path, area.x() + 20, area.y() + 20)
     assert w.geometry().topLeft().x() == area.x() + 20
     assert w.geometry().topLeft().y() == area.y() + 20
+
+
+def test_window_and_chart_tab_use_icons(qapp, monkeypatch, tmp_path):
+    w = _main_window_with_geometry(monkeypatch, tmp_path, 60, 60)
+    assert not w.windowIcon().isNull(), "窗口图标未加载（assets/icons/app.ico）"
+    assert not w.receive_tabs.tabIcon(1).isNull(), "波形页签图标未加载（chart-tab.svg）"
+    assert "📈" not in w.receive_tabs.tabText(1)

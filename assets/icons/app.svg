@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="serial toolbox">
+  <title>Serial Toolbox — 工具箱 + UART 波形</title>
+  <defs>
+    <linearGradient id="app-bg" x1="28" y1="20" x2="228" y2="236" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5EEAD4"/><stop offset="0.45" stop-color="#34D399"/><stop offset="1" stop-color="#0E9F6E"/>
+    </linearGradient>
+    <linearGradient id="app-sheen" x1="0" y1="8" x2="0" y2="132" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="app-wave" x1="56" y1="148" x2="200" y2="180" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0F766E"/><stop offset="1" stop-color="#047857"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#app-bg)"/>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#app-sheen)"/>
+
+  <path d="M86 100V72a18 18 0 0 1 18-18h48a18 18 0 0 1 18 18v28" fill="none"
+        stroke="#ffffff" stroke-width="16" stroke-linejoin="round"/>
+  <rect x="36" y="96" width="184" height="112" rx="28" fill="#ffffff"/>
+  <path d="M56 128h144" stroke="#0E9F6E" stroke-width="8" stroke-linecap="round"/>
+  <path d="M56 180h20v-28h20v28h20v-28h20v28h20v-28h20v28h24" fill="none"
+        stroke="url(#app-wave)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

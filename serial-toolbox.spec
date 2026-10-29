@@ -13,11 +13,17 @@ hiddenimports = (
 # 因此要原样落到 ch347/lib/ 下，不能只当普通二进制丢到根目录。
 ch347_data = collect_data_files('ch347', includes=['lib/*.DLL', 'include/*.H'])
 
+# 窗口/页签图标运行时按 sys._MEIPASS 读取
+icon_data = [
+    ('assets/icons/app.ico', 'assets/icons'),
+    ('assets/icons/chart-tab.svg', 'assets/icons'),
+]
+
 a = Analysis(
     ['main.py'],
     pathex=['.'],
     binaries=[],
-    datas=ch347_data,
+    datas=ch347_data + icon_data,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
@@ -47,4 +53,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon='assets/icons/app.ico',
 )
