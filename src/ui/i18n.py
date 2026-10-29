@@ -50,7 +50,7 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "label_input_status": "输入状态:",
         # 接收区
         "tab_text": "📝 文本",
-        "tab_chart": "📈 波形",
+        "tab_chart": "波形",
         "tab_modbus": "🔢 Modbus解析",
         "tab_protocol": "🔌 协议解析",
         "check_hex_display": "HEX 显示",
@@ -386,7 +386,7 @@ TRANSLATIONS: dict[Language, dict[str, str]] = {
         "label_input_status": "Input Status:",
         # Receive Area
         "tab_text": "📝 Text",
-        "tab_chart": "📈 Chart",
+        "tab_chart": "Chart",
         "tab_modbus": "🔢 Modbus",
         "tab_protocol": "🔌 Protocol",
         "check_hex_display": "HEX Display",

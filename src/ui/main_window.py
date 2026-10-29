@@ -8,7 +8,7 @@ import sys
 from datetime import datetime
 
 from PyQt6.QtCore import QRect, Qt, QTimer, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QAction, QCloseEvent, QFont, QTextCursor
+from PyQt6.QtGui import QAction, QCloseEvent, QFont, QIcon, QTextCursor
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -56,6 +56,7 @@ from src.ui.extended_panels import (
 )
 from src.ui.i2c_panel import I2CPanel
 from src.ui.i18n import I18nManager, Language
+from src.ui.icons import icon_file
 from src.ui.multi_port_dialog import MultiPortManagerDialog
 from src.ui.theme_manager import ThemeManager, ThemeMode
 
@@ -293,6 +294,8 @@ class SerialToolboxMainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
+
+        self.setWindowIcon(QIcon(str(icon_file("app.ico"))))
 
         # 配置管理
         self.config_mgr = ConfigManager()
@@ -799,6 +802,7 @@ class SerialToolboxMainWindow(QMainWindow):
         self.chart.set_x_axis_mode(self.app_config.chart_x_axis)
         self.chart.collect_check.setChecked(self.app_config.chart_collect)
         self.receive_tabs.addTab(self.chart, "")
+        self.receive_tabs.setTabIcon(1, QIcon(str(icon_file("chart-tab.svg"))))
 
         # Tab 3: Modbus 响应解析
         self.modbus_response_panel = ModbusResponsePanel(i18n=self.i18n)

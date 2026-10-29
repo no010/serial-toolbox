@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="serial toolbox small">
+  <title>Serial Toolbox — 工具箱（16/24px 简化版）</title>
+  <defs>
+    <linearGradient id="sm-bg" x1="28" y1="20" x2="228" y2="236" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5EEAD4"/><stop offset="0.45" stop-color="#34D399"/><stop offset="1" stop-color="#0E9F6E"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="4" y="4" width="248" height="248" rx="58" fill="url(#sm-bg)"/>
+  <path d="M88 100V72a22 22 0 0 1 22-22h36a22 22 0 0 1 22 22v28" fill="none"
+        stroke="#ffffff" stroke-width="20" stroke-linejoin="round"/>
+  <rect x="28" y="94" width="200" height="122" rx="32" fill="#ffffff"/>
+  <path d="M56 182h26v-40h30v40h30v-40h30v40h28" fill="none"
+        stroke="#047857" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
