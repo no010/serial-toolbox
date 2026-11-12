@@ -1305,6 +1305,8 @@ class SerialToolboxMainWindow(QMainWindow):
             self.stream_parser.set_protocol(None)
         else:
             self.stream_parser.set_protocol(protocol_name)
+        # 重解析缓冲里已收到但尚未定界的数据：换协议/重载模板后立即生效，无需重发
+        self._parse_protocol_data(b"")
 
     def _parse_protocol_data(self, data: bytes):
         """解析协议数据"""

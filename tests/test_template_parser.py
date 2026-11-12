@@ -519,6 +519,38 @@ def test_registry_reload_after_save_and_delete(tmp_path):
     assert "Stub-Builtin" in reg.list_protocols()
 
 
+def test_stream_refeed_buffer_after_protocol_switch():
+    """缓冲里已收数据在切换协议后应被重解析（feed(b"")），无需重发。"""
+    from src.core.protocol_plugin import ProtocolRegistry, StreamProtocolParser
+
+    p = TemplateProtocolParser(create_nested_sample_template())
+    reg = ProtocolRegistry.__new__(ProtocolRegistry)
+    reg.parsers = {p.name: p}
+    reg.template_manager = None
+    reg._template_parser_names = {p.name}
+    frame = p.build_frame(cmd=1, seq=2, data_segment=[{"sub_cmd": 1, "sub_data": "AABBCC"}])
+
+    # 先锁定到一个不存在的协议：数据滞留缓冲、不产出帧
+    sp = StreamProtocolParser(reg)
+    sp.set_protocol("NoSuchProtocol")
+    assert sp.feed(frame) == []
+    assert len(sp.buffer) == len(frame)
+
+    # 手动选中正确协议后重喂空数据 → 解析缓冲
+    sp.set_protocol(p.name)
+    out = sp.feed(b"")
+    assert len(out) == 1 and out[0].is_valid
+    assert len(sp.buffer) == 0
+
+    # 回到自动检测同样能重解析缓冲
+    sp2 = StreamProtocolParser(reg)
+    sp2.set_protocol("NoSuchProtocol")
+    sp2.feed(frame)
+    sp2.set_protocol(None)
+    out2 = sp2.feed(b"")
+    assert len(out2) == 1 and out2[0].protocol == p.name
+
+
 def test_build_subframe_wrong_type_raises():
     p = TemplateProtocolParser(create_nested_sample_template())
     with pytest.raises(ValueError):
