@@ -50,17 +50,27 @@ def calculate_crc16_xmodem(data: bytes) -> int:
 
 @dataclass
 class TemplateField:
-    """模板字段定义"""
+    """模板字段定义
+
+    type 为 subframe 时表示嵌套子帧：fields 是相对子帧起点的子字段，
+    size_from 引用同层已解析的整数字段作为本字段字节数，repeat=True 时
+    把所在段按子帧块循环解析直到段尾（即 TLV：子命令/子长度/子数据）。
+    """
 
     name: str
-    type: str  # uint8, uint16, uint32, bytes, string
+    type: str  # uint8, uint16, uint32, bytes, string, subframe
     offset: int
     size: int = 1
     endianness: str = "big"  # big, little
     description: str = ""
+    size_from: str | None = None  # 引用 earlier 字段名，用其值作为本字段字节数
+    fields: list[dict[str, Any]] = field(default_factory=list)  # subframe 子字段
+    repeat: bool = False  # subframe 是否循环到段尾
 
     # size → 默认整数类型（供缺少 type 的字段，如 length_field 推断）
     _SIZE_TO_TYPE = {1: "uint8", 2: "uint16", 4: "uint32"}
+    # type → 默认字节数（供缺少 size 的定宽整数字段推断）
+    _TYPE_TO_SIZE = {"uint8": 1, "uint16": 2, "uint32": 4}
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -71,6 +81,12 @@ class TemplateField:
         known = {f.name for f in dataclass_fields(cls)}
         clean = {k: v for k, v in data.items() if k in known}
         clean.setdefault("type", cls._SIZE_TO_TYPE.get(clean.get("size", 1), "bytes"))
+        if "size" not in clean:
+            # 省略 size：subframe 记 0（填充到段尾），定宽整数按类型推断，其余默认 1
+            if clean["type"] == "subframe":
+                clean["size"] = 0
+            else:
+                clean["size"] = cls._TYPE_TO_SIZE.get(clean["type"], 1)
         return cls(**clean)
 
 
@@ -179,17 +195,21 @@ class TemplateProtocolParser(ProtocolParserBase):
         error_msg = ""
 
         try:
-            for field_data in self.template.fields:
-                field_def = TemplateField.from_dict(field_data)
-                value = self._parse_field(data, field_def)
-                fields[field_def.name] = value
-
-            # 如果有长度字段，加入字段列表
+            # 长度字段先解析，供后续字段的 size_from 引用
             if self.template.length_field:
                 lf_copy = dict(self.template.length_field)
                 lf_copy.setdefault("name", "length")
                 length_field = TemplateField.from_dict(lf_copy)
-                fields[length_field.name] = self._parse_field(data, length_field)
+                fields[length_field.name] = self._read_field(data, length_field, fields)
+
+            # 子帧“填充到段尾”的边界：帧尾之前，且不越过 CRC
+            fill_end = len(data) - len(self.tail)
+            if self.template.crc:
+                fill_end = min(fill_end, self._crc_offset(len(data)))
+
+            for field_data in self.template.fields:
+                field_def = TemplateField.from_dict(field_data)
+                fields[field_def.name] = self._read_field(data, field_def, fields, fill_end)
 
             # CRC 校验
             if self.template.crc:
@@ -236,21 +256,40 @@ class TemplateProtocolParser(ProtocolParserBase):
         # 无长度字段，使用 min_length
         return self.template.min_length
 
-    def _parse_field(self, data: bytes, field_def: TemplateField) -> Any:
-        """解析单个字段"""
-        if len(data) < field_def.offset + field_def.size:
-            raise ValueError(f"字段 {field_def.name} 超出帧范围")
+    def _field_size(self, fd: TemplateField, values: dict[str, Any], fill_end: int) -> int:
+        """解析字段实际字节数：size_from 引用 > 定长 size > subframe 填充到段尾"""
+        if fd.size_from:
+            ref = values.get(fd.size_from)
+            if not isinstance(ref, int):
+                raise ValueError(f"字段 {fd.name} 的 size_from 引用了非整数字段 {fd.size_from}")
+            return ref
+        if fd.type == "subframe" and fd.size <= 0:
+            return max(0, fill_end - fd.offset)
+        return fd.size
 
-        raw = data[field_def.offset : field_def.offset + field_def.size]
-        field_type = field_def.type.lower()
+    def _read_field(
+        self, data: bytes, fd: TemplateField, values: dict[str, Any], fill_end: int | None = None
+    ) -> Any:
+        """按偏移切出字段原始字节并解码（subframe 递归）"""
+        end = len(data) if fill_end is None else fill_end
+        size = self._field_size(fd, values, end)
+        if fd.offset + size > len(data):
+            raise ValueError(f"字段 {fd.name} 超出帧范围")
+        raw = data[fd.offset : fd.offset + size]
+        return self._decode_value(raw, fd, values)
 
+    def _decode_value(self, raw: bytes, fd: TemplateField, values: dict[str, Any]) -> Any:
+        """把原始字节解码为字段值；subframe 交给递归子帧解析"""
+        field_type = fd.type.lower()
+        if field_type == "subframe":
+            return self._parse_subframe(raw, fd.fields, values, fd.repeat)
+
+        endian = "<" if fd.endianness == "little" else ">"
         if field_type == "uint8":
             return raw[0]
         elif field_type == "uint16":
-            endian = "<" if field_def.endianness == "little" else ">"
             return struct.unpack(endian + "H", raw)[0]
         elif field_type == "uint32":
-            endian = "<" if field_def.endianness == "little" else ">"
             return struct.unpack(endian + "I", raw)[0]
         elif field_type == "bytes":
             return " ".join(f"{b:02X}" for b in raw)
@@ -258,6 +297,55 @@ class TemplateProtocolParser(ProtocolParserBase):
             return raw.decode("utf-8", errors="replace")
         else:
             return list(raw)
+
+    def _parse_subframe(
+        self, seg: bytes, fields: list[dict[str, Any]], parent_values: dict[str, Any], repeat: bool
+    ) -> Any:
+        """递归解析子帧。
+
+        子字段偏移相对子帧（或当前块）起点；repeat=True 时按块循环到段尾，
+        每块 consumed = 各子字段 (offset+实际size) 的最大值，返回块列表；
+        否则返回单个块字典。无子字段定义时整段按原始 hex 输出。
+        """
+        if not fields:
+            return " ".join(f"{b:02X}" for b in seg)
+        n = len(seg)
+        if n == 0:
+            return [] if repeat else {}
+
+        child_defs = [TemplateField.from_dict(c) for c in fields]
+        results: list[dict[str, Any]] = []
+        cursor = 0
+        while cursor < n:
+            block = seg[cursor:]
+            remaining = n - cursor
+            vals = dict(parent_values)  # 供 size_from 跨层引用，块间互不污染
+            out: dict[str, Any] = {}
+            consumed = 0
+            for cfd in child_defs:
+                csize = self._field_size(cfd, vals, remaining)
+                if cfd.offset + csize > remaining:
+                    raise ValueError(f"子字段 {cfd.name} 超出子帧范围")
+                raw = block[cfd.offset : cfd.offset + csize]
+                val = self._decode_value(raw, cfd, vals)
+                vals[cfd.name] = val
+                out[cfd.name] = val
+                consumed = max(consumed, cfd.offset + csize)
+            results.append(out)
+            if not repeat:
+                break
+            if consumed <= 0:
+                raise ValueError("子帧重复块长度为 0，无法继续解析")
+            cursor += consumed
+        return results if repeat else results[0]
+
+    def _crc_offset(self, data_len: int) -> int:
+        """CRC 字段偏移：offset 为 'auto' 时落在帧尾之前（变长帧用），否则用定值"""
+        crc_cfg = self.template.crc or {}
+        offset = crc_cfg.get("offset", 0)
+        if offset == "auto":
+            return data_len - len(self.tail) - crc_cfg.get("size", 2)
+        return offset
 
     def _crc_coverage_data(self, data: bytes, crc_cfg: dict, offset: int) -> bytes:
         """按 coverage 配置切出参与 CRC 计算的数据（build 与 verify 共用）"""
@@ -274,7 +362,7 @@ class TemplateProtocolParser(ProtocolParserBase):
         if crc_cfg is None:
             return True, {"crc_valid": True}
 
-        offset = crc_cfg.get("offset", 0)
+        offset = self._crc_offset(len(data))
         size = crc_cfg.get("size", 2)
         endianness = crc_cfg.get("endianness", "big")
         algorithm = crc_cfg.get("algorithm", "modbus")
@@ -302,16 +390,20 @@ class TemplateProtocolParser(ProtocolParserBase):
         }
 
     def build_frame(self, **kwargs) -> bytes:
-        """根据模板按 offset 布局构建帧（自动填充长度字段与 CRC）"""
+        """根据模板构建帧（自动填充长度字段与 CRC，支持 subframe 嵌套/变长）"""
         field_defs = [TemplateField.from_dict(fd) for fd in self.template.fields]
+        raws = self._serialize_field_set(field_defs, kwargs)
 
-        # 1) 计算帧总长：各字段/CRC 的最大 (offset+size)，再加帧尾
+        # 1) 帧总长：各字段实际字节数的最大 (offset+len)，CRC，再加帧尾
         end = len(self.header)
         for fd in field_defs:
-            end = max(end, fd.offset + fd.size)
+            end = max(end, fd.offset + len(raws[fd.name]))
         crc_cfg = self.template.crc
+        crc_off = end
         if crc_cfg:
-            end = max(end, crc_cfg.get("offset", 0) + crc_cfg.get("size", 2))
+            # 'auto'：CRC 紧跟字段之后（变长帧）；否则用模板定值
+            crc_off = end if crc_cfg.get("offset", 0) == "auto" else crc_cfg.get("offset", 0)
+            end = max(end, crc_off + crc_cfg.get("size", 2))
         total = end + len(self.tail)
 
         frame = bytearray(total)
@@ -320,10 +412,7 @@ class TemplateProtocolParser(ProtocolParserBase):
             frame[: len(self.header)] = self.header
         # 3) 字段按 offset 放置
         for fd in field_defs:
-            value = kwargs.get(fd.name)
-            if value is None:
-                raise ValueError(f"缺少字段值: {fd.name}")
-            raw = self._serialize_field(value, fd)
+            raw = raws[fd.name]
             if fd.offset + len(raw) > total:
                 raise ValueError(f"字段 {fd.name} 超出帧范围")
             frame[fd.offset : fd.offset + len(raw)] = raw
@@ -340,18 +429,63 @@ class TemplateProtocolParser(ProtocolParserBase):
             frame[total - len(self.tail) :] = self.tail
         # 6) CRC（'before_crc'/'after_header' 可往返；'all' 含 CRC 自身，不可往返）
         if crc_cfg:
-            off = crc_cfg.get("offset", 0)
             size = crc_cfg.get("size", 2)
             endian = "little" if crc_cfg.get("endianness", "big") == "little" else "big"
             algorithm = crc_cfg.get("algorithm", "modbus")
-            crc_data = self._crc_coverage_data(bytes(frame), crc_cfg, off)
+            crc_data = self._crc_coverage_data(bytes(frame), crc_cfg, crc_off)
             calc = (
                 calculate_crc16_xmodem(crc_data)
                 if algorithm == "xmodem"
                 else calculate_crc16_modbus(crc_data)
             )
-            frame[off : off + size] = calc.to_bytes(size, endian)
+            frame[crc_off : crc_off + size] = calc.to_bytes(size, endian)
         return bytes(frame)
+
+    def _serialize_field_set(
+        self, children: list[TemplateField], values: dict[str, Any]
+    ) -> dict[str, bytes]:
+        """序列化一组同层字段；size_from 引用的长度字段按依赖字段实际字节数自动回填"""
+        names = {c.name for c in children}
+        targets = {c.size_from for c in children if c.size_from and c.size_from in names}
+        raws: dict[str, bytes] = {}
+        for cfd in children:
+            if cfd.name in targets:
+                continue  # 长度字段稍后按依赖字段实际长度回填
+            value = values.get(cfd.name)
+            if value is None:
+                raise ValueError(f"缺少字段值: {cfd.name}")
+            if cfd.type == "subframe":
+                raws[cfd.name] = self._build_subframe(value, cfd)
+            else:
+                raws[cfd.name] = self._serialize_field(value, cfd)
+        for cfd in children:
+            if cfd.size_from and cfd.size_from in targets:
+                target = next(c for c in children if c.name == cfd.size_from)
+                raws[target.name] = self._serialize_field(len(raws[cfd.name]), target)
+        return raws
+
+    def _build_subframe(self, value: Any, fd: TemplateField) -> bytes:
+        """构建子帧：repeat 时 value 是块列表，否则单块字典；无子字段时按原始字节"""
+        if not fd.fields:
+            if isinstance(value, str):
+                return bytes.fromhex(value.replace(" ", ""))
+            return bytes(value)
+        child_defs = [TemplateField.from_dict(c) for c in fd.fields]
+        blocks = value if fd.repeat else [value]
+        out = bytearray()
+        for block in blocks:
+            if not isinstance(block, dict):
+                raise ValueError(f"子帧 {fd.name} 的块必须是字典")
+            raws = self._serialize_field_set(child_defs, block)
+            end = 0
+            for cfd in child_defs:
+                end = max(end, cfd.offset + len(raws[cfd.name]))
+            buf = bytearray(end)
+            for cfd in child_defs:
+                raw = raws[cfd.name]
+                buf[cfd.offset : cfd.offset + len(raw)] = raw
+            out += buf
+        return bytes(out)
 
     def _serialize_field(self, value: Any, field_def: TemplateField) -> bytes:
         """序列化字段值"""
@@ -516,6 +650,52 @@ def create_sample_template() -> ProtocolTemplate:
         ],
         crc={
             "offset": 8,
+            "size": 2,
+            "endianness": "big",
+            "algorithm": "modbus",
+            "coverage": "before_crc",
+        },
+    )
+
+
+def create_nested_sample_template() -> ProtocolTemplate:
+    """创建嵌套子帧示例（数据段 = 重复的 子命令/子长度/子数据，即 TLV）
+
+    帧布局: EB 90 | 长度(2) | cmd | seq | [数据段: 若干 TLV 块] | CRC(2) | 0D 0A
+    数据段填充到 CRC 之前；每块 = sub_cmd(1) + sub_len(1) + sub_data(sub_len 字节)。
+    把 sub_data 的 type 改成 subframe 并给它 fields，即可继续往里递归嵌套。
+    """
+    return ProtocolTemplate(
+        name="Nested-TLV-Packet",
+        description="示例: 数据段嵌套子帧 (子命令+子数据长度+子数据段, 可重复/递归)",
+        header="EB 90",
+        tail="0D 0A",
+        min_length=8,
+        length_field={"name": "length", "offset": 2, "size": 2, "endianness": "big"},
+        fields=[
+            {"name": "cmd", "type": "uint8", "offset": 4, "description": "外层命令字"},
+            {"name": "seq", "type": "uint8", "offset": 5, "description": "序列号"},
+            {
+                "name": "data_segment",
+                "type": "subframe",
+                "offset": 6,
+                "repeat": True,
+                "description": "数据段: 重复 TLV 块, 填充到 CRC 之前",
+                "fields": [
+                    {"name": "sub_cmd", "type": "uint8", "offset": 0, "description": "子命令"},
+                    {"name": "sub_len", "type": "uint8", "offset": 1, "description": "子数据长度"},
+                    {
+                        "name": "sub_data",
+                        "type": "bytes",
+                        "offset": 2,
+                        "size_from": "sub_len",
+                        "description": "子数据段 (长度由 sub_len 驱动)",
+                    },
+                ],
+            },
+        ],
+        crc={
+            "offset": "auto",
             "size": 2,
             "endianness": "big",
             "algorithm": "modbus",

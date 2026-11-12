@@ -623,3 +623,20 @@ def test_window_and_chart_tab_use_icons(qapp, monkeypatch, tmp_path):
     assert not w.windowIcon().isNull(), "窗口图标未加载（assets/icons/app.ico）"
     assert not w.receive_tabs.tabIcon(1).isNull(), "波形页签图标未加载（chart-tab.svg）"
     assert "📈" not in w.receive_tabs.tabText(1)
+
+
+def test_template_dialog_nested_sample_preview(qapp, tmp_path):
+    """嵌套示例按钮载入 TLV 模板，预览递归展开子字段（用 tmp 目录，不碰真实配置）。"""
+    from src.protocols.template_parser import ProtocolTemplateManager
+    from src.ui.extended_panels import ProtocolTemplateDialog
+
+    mgr = ProtocolTemplateManager(template_dir=str(tmp_path))
+    dlg = ProtocolTemplateDialog(None, template_manager=mgr)
+    dlg._load_nested_sample_template()
+    js = dlg.json_edit.toPlainText()
+    assert "subframe" in js and "size_from" in js
+    preview = dlg.preview_text.toPlainText()
+    assert "data_segment" in preview and "[repeat]" in preview
+    assert "sub_cmd" in preview and "sub_len" in preview and "sub_data" in preview
+    assert "size_from sub_len" in preview
+    dlg.deleteLater()

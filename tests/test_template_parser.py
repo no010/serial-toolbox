@@ -11,6 +11,7 @@ from src.protocols.template_parser import (
     TemplateProtocolParser,
     calculate_crc16_modbus,
     calculate_crc16_xmodem,
+    create_nested_sample_template,
     create_sample_template,
 )
 
@@ -77,6 +78,12 @@ def test_template_field_type_inferred_from_size():
     assert f.type == "uint16"  # size=2 → uint16，且忽略多余键
 
 
+def test_template_field_size_inferred_from_type():
+    assert TemplateField.from_dict({"name": "x", "type": "uint16", "offset": 0}).size == 2
+    assert TemplateField.from_dict({"name": "x", "type": "uint32", "offset": 0}).size == 4
+    assert TemplateField.from_dict({"name": "x", "type": "uint8", "offset": 0}).size == 1
+
+
 def test_protocol_template_ignores_extra_keys():
     t = ProtocolTemplate.from_dict({"name": "t", "whatever": 1, "fields": []})
     assert t.name == "t"
@@ -117,3 +124,394 @@ def test_save_load_delete_cycle(tmp_path):
 
     assert m.delete_template("My-Proto_v1")
     assert not os.path.exists(fp)
+
+
+# ── 嵌套子帧 / TLV ──────────────────────────────────────────
+
+
+def test_nested_tlv_round_trip():
+    p = TemplateProtocolParser(create_nested_sample_template())
+    seg = [{"sub_cmd": 1, "sub_data": "AABBCC"}, {"sub_cmd": 2, "sub_data": "01020304"}]
+    frame = p.build_frame(cmd=0x11, seq=0x22, data_segment=seg)
+    ok, consumed = p.detect_frame(frame)
+    assert ok and consumed == len(frame)
+    parsed = p.parse(frame)
+    assert parsed is not None
+    assert parsed.is_valid, parsed.error_msg
+    assert parsed.fields["cmd"] == 0x11
+    blocks = parsed.fields["data_segment"]
+    assert blocks[0] == {"sub_cmd": 1, "sub_len": 3, "sub_data": "AA BB CC"}
+    assert blocks[1] == {"sub_cmd": 2, "sub_len": 4, "sub_data": "01 02 03 04"}
+
+
+@pytest.mark.parametrize("payloads", [["AA"], ["AA", "BB", "CC"], ["0102030405"]])
+def test_nested_variable_length_round_trip(payloads):
+    # 变长帧 + auto CRC：不同载荷长度都能解析/构建往返
+    p = TemplateProtocolParser(create_nested_sample_template())
+    seg = [{"sub_cmd": i + 1, "sub_data": d} for i, d in enumerate(payloads)]
+    frame = p.build_frame(cmd=1, seq=2, data_segment=seg)
+    parsed = p.parse(frame)
+    assert parsed is not None
+    assert parsed.is_valid, parsed.error_msg
+    assert len(parsed.fields["data_segment"]) == len(payloads)
+    assert parsed.fields["length"] == len(frame) - 4
+
+
+def test_recursive_subframe():
+    tpl = ProtocolTemplate(
+        name="R",
+        header="EB 90",
+        tail="0D 0A",
+        min_length=6,
+        length_field={"name": "length", "offset": 2, "size": 2, "endianness": "big"},
+        fields=[
+            {
+                "name": "seg",
+                "type": "subframe",
+                "offset": 4,
+                "repeat": True,
+                "fields": [
+                    {"name": "sub_cmd", "type": "uint8", "offset": 0},
+                    {"name": "sub_len", "type": "uint8", "offset": 1},
+                    {
+                        "name": "sub_data",
+                        "type": "subframe",
+                        "offset": 2,
+                        "size_from": "sub_len",
+                        "fields": [
+                            {"name": "in_cmd", "type": "uint8", "offset": 0},
+                            {"name": "in_len", "type": "uint8", "offset": 1},
+                            {
+                                "name": "in_data",
+                                "type": "bytes",
+                                "offset": 2,
+                                "size_from": "in_len",
+                            },
+                        ],
+                    },
+                ],
+            }
+        ],
+        crc={"offset": "auto", "size": 2, "algorithm": "modbus", "coverage": "before_crc"},
+    )
+    p = TemplateProtocolParser(tpl)
+    frame = p.build_frame(seg=[{"sub_cmd": 9, "sub_data": {"in_cmd": 5, "in_data": "FFEE"}}])
+    parsed = p.parse(frame)
+    assert parsed is not None
+    assert parsed.is_valid, parsed.error_msg
+    blk = parsed.fields["seg"][0]
+    assert blk["sub_cmd"] == 9 and blk["sub_len"] == 4
+    assert blk["sub_data"] == {"in_cmd": 5, "in_len": 2, "in_data": "FF EE"}
+
+
+def test_single_subframe_fixed_size():
+    tpl = ProtocolTemplate(
+        name="S",
+        header="AA",
+        min_length=4,
+        fields=[
+            {
+                "name": "hdr",
+                "type": "subframe",
+                "offset": 1,
+                "size": 3,
+                "fields": [
+                    {"name": "a", "type": "uint8", "offset": 0},
+                    {"name": "b", "type": "uint16", "offset": 1, "endianness": "big"},
+                ],
+            }
+        ],
+    )
+    p = TemplateProtocolParser(tpl)
+    frame = p.build_frame(hdr={"a": 1, "b": 0x0203})
+    assert frame == bytes.fromhex("AA010203")
+    parsed = p.parse(frame)
+    assert parsed is not None and parsed.is_valid
+    assert parsed.fields["hdr"] == {"a": 1, "b": 0x0203}
+
+
+def test_top_level_size_from_bytes():
+    tpl = ProtocolTemplate(
+        name="D",
+        header="BB",
+        min_length=3,
+        length_field={"name": "length", "offset": 1, "size": 1, "endianness": "big"},
+        fields=[{"name": "payload", "type": "bytes", "offset": 2, "size_from": "length"}],
+    )
+    p = TemplateProtocolParser(tpl)
+    frame = p.build_frame(payload="010203")
+    assert frame == bytes.fromhex("BB03010203")
+    parsed = p.parse(frame)
+    assert parsed is not None and parsed.is_valid
+    assert parsed.fields["payload"] == "01 02 03"
+    assert parsed.fields["length"] == 3
+
+
+def test_subframe_fill_to_tail():
+    tpl = ProtocolTemplate(
+        name="F",
+        header="CC",
+        tail="DD",
+        min_length=3,
+        fields=[
+            {
+                "name": "seg",
+                "type": "subframe",
+                "offset": 1,
+                "repeat": True,
+                "fields": [
+                    {"name": "t", "type": "uint8", "offset": 0},
+                    {"name": "l", "type": "uint8", "offset": 1},
+                    {"name": "v", "type": "bytes", "offset": 2, "size_from": "l"},
+                ],
+            }
+        ],
+    )
+    p = TemplateProtocolParser(tpl)
+    frame = p.build_frame(seg=[{"t": 1, "v": "AA"}, {"t": 2, "v": "BBCC"}])
+    parsed = p.parse(frame)
+    assert parsed is not None
+    assert parsed.is_valid, parsed.error_msg
+    assert len(parsed.fields["seg"]) == 2
+
+
+def test_subframe_size_from_outer_field():
+    tpl = ProtocolTemplate(
+        name="L",
+        header="AB",
+        min_length=3,
+        fields=[
+            {"name": "seglen", "type": "uint8", "offset": 1},
+            {
+                "name": "seg",
+                "type": "subframe",
+                "offset": 2,
+                "size_from": "seglen",
+                "repeat": True,
+                "fields": [
+                    {"name": "t", "type": "uint8", "offset": 0},
+                    {"name": "l", "type": "uint8", "offset": 1},
+                    {"name": "v", "type": "bytes", "offset": 2, "size_from": "l"},
+                ],
+            },
+        ],
+    )
+    p = TemplateProtocolParser(tpl)
+    frame = p.build_frame(seg=[{"t": 1, "v": "AA"}])
+    parsed = p.parse(frame)
+    assert parsed is not None
+    assert parsed.is_valid, parsed.error_msg
+    assert parsed.fields["seglen"] == 3  # 构建时按子帧实际长度自动回填
+    assert parsed.fields["seg"] == [{"t": 1, "l": 1, "v": "AA"}]
+
+
+def test_nested_empty_segment():
+    p = TemplateProtocolParser(create_nested_sample_template())
+    frame = p.build_frame(cmd=1, seq=2, data_segment=[])
+    parsed = p.parse(frame)
+    assert parsed is not None
+    assert parsed.is_valid, parsed.error_msg
+    assert parsed.fields["data_segment"] == []
+
+
+def test_repeat_zero_length_block_guard():
+    tpl = ProtocolTemplate(
+        name="Z",
+        min_length=2,
+        fields=[
+            {"name": "n", "type": "uint8", "offset": 0},
+            {
+                "name": "seg",
+                "type": "subframe",
+                "offset": 1,
+                "repeat": True,
+                "fields": [{"name": "v", "type": "bytes", "offset": 0, "size_from": "n"}],
+            },
+        ],
+    )
+    p = TemplateProtocolParser(tpl)
+    parsed = p.parse(bytes([0x00, 0xAA]))  # n=0 但段非空 → 每块消费 0
+    assert parsed is not None and not parsed.is_valid
+    assert "长度为 0" in parsed.error_msg
+
+
+def test_opaque_subframe_hex():
+    tpl = ProtocolTemplate(
+        name="O",
+        header="EE",
+        min_length=2,
+        fields=[{"name": "blob", "type": "subframe", "offset": 1, "size": 3}],
+    )
+    p = TemplateProtocolParser(tpl)
+    parsed = p.parse(bytes.fromhex("EE010203"))
+    assert parsed is not None and parsed.is_valid
+    assert parsed.fields["blob"] == "01 02 03"
+
+
+def test_subframe_size_omitted_means_fill():
+    assert TemplateField.from_dict({"name": "s", "type": "subframe", "offset": 2}).size == 0
+    assert (
+        TemplateField.from_dict({"name": "s", "type": "subframe", "offset": 2, "size": 5}).size == 5
+    )
+
+
+def test_build_missing_subframe_raises():
+    p = TemplateProtocolParser(create_nested_sample_template())
+    with pytest.raises(ValueError):
+        p.build_frame(cmd=1, seq=2)  # 缺 data_segment
+
+
+def test_nested_detect_in_noise():
+    p = TemplateProtocolParser(create_nested_sample_template())
+    frame = p.build_frame(cmd=1, seq=2, data_segment=[{"sub_cmd": 1, "sub_data": "AA"}])
+    ok, consumed = p.detect_frame(b"\x00\x99" + frame + b"\x7f")
+    assert ok and consumed == 2 + len(frame)
+
+
+# ── 嵌套子帧：对抗性边界 ─────────────────────────────────────
+
+
+def test_nested_truncated_frame_invalid():
+    p = TemplateProtocolParser(create_nested_sample_template())
+    frame = p.build_frame(cmd=1, seq=2, data_segment=[{"sub_cmd": 1, "sub_data": "AABBCC"}])
+    parsed = p.parse(frame[:-4])  # 截断帧尾/CRC
+    assert parsed is not None and not parsed.is_valid
+
+
+def test_nested_overdeclared_sublen_invalid():
+    p = TemplateProtocolParser(create_nested_sample_template())
+    frame = bytearray(p.build_frame(cmd=1, seq=2, data_segment=[{"sub_cmd": 1, "sub_data": "AA"}]))
+    frame[7] = 0xFF  # sub_len 谎报超大
+    parsed = p.parse(bytes(frame))
+    assert parsed is not None and not parsed.is_valid
+    assert "超出子帧范围" in parsed.error_msg
+
+
+def test_nested_zero_length_value_blocks():
+    p = TemplateProtocolParser(create_nested_sample_template())
+    seg = [{"sub_cmd": 1, "sub_data": ""}, {"sub_cmd": 2, "sub_data": ""}]
+    parsed = p.parse(p.build_frame(cmd=1, seq=2, data_segment=seg))
+    assert parsed is not None
+    assert parsed.is_valid, parsed.error_msg
+    assert [b["sub_len"] for b in parsed.fields["data_segment"]] == [0, 0]  # 不死循环
+
+
+def test_size_from_missing_field_invalid():
+    tpl = ProtocolTemplate(
+        name="m", fields=[{"name": "x", "type": "bytes", "offset": 0, "size_from": "nope"}]
+    )
+    parsed = TemplateProtocolParser(tpl).parse(b"\x01\x02")
+    assert parsed is not None and not parsed.is_valid
+
+
+def test_size_from_non_integer_invalid():
+    tpl = ProtocolTemplate(
+        name="n",
+        fields=[
+            {"name": "a", "type": "bytes", "offset": 0, "size": 1},
+            {"name": "x", "type": "bytes", "offset": 1, "size_from": "a"},
+        ],
+    )
+    parsed = TemplateProtocolParser(tpl).parse(b"\x01\x02")
+    assert parsed is not None and not parsed.is_valid
+
+
+def test_nested_little_endian_round_trip():
+    tpl = ProtocolTemplate(
+        name="le",
+        header="EB 90",
+        tail="0D 0A",
+        min_length=6,
+        length_field={"name": "length", "offset": 2, "size": 2, "endianness": "little"},
+        fields=[
+            {
+                "name": "seg",
+                "type": "subframe",
+                "offset": 4,
+                "repeat": True,
+                "fields": [
+                    {"name": "c", "type": "uint8", "offset": 0},
+                    {"name": "l", "type": "uint8", "offset": 1},
+                    {"name": "v", "type": "bytes", "offset": 2, "size_from": "l"},
+                ],
+            }
+        ],
+        crc={
+            "offset": "auto",
+            "size": 2,
+            "endianness": "little",
+            "algorithm": "modbus",
+            "coverage": "before_crc",
+        },
+    )
+    p = TemplateProtocolParser(tpl)
+    parsed = p.parse(p.build_frame(seg=[{"c": 1, "v": "AABB"}]))
+    assert parsed is not None
+    assert parsed.is_valid, parsed.error_msg
+    assert parsed.fields["seg"] == [{"c": 1, "l": 2, "v": "AA BB"}]
+
+
+def test_nested_stream_chunked():
+    from src.core.protocol_plugin import ProtocolRegistry, StreamProtocolParser
+
+    p = TemplateProtocolParser(create_nested_sample_template())
+    # 绕过会加载内置协议/用户模板目录的 __init__，只装本解析器（不碰真实配置）
+    reg = ProtocolRegistry.__new__(ProtocolRegistry)
+    reg.parsers = {p.name: p}
+    reg.template_manager = None
+    frame = p.build_frame(cmd=1, seq=2, data_segment=[{"sub_cmd": 1, "sub_data": "AABBCC"}])
+    sp = StreamProtocolParser(reg)
+    sp.set_protocol(p.name)
+    out = []
+    for byte in frame:  # 逐字节喂入，验证流式定界
+        out += sp.feed(bytes([byte]))
+    assert len(out) == 1 and out[0].is_valid
+
+
+def test_build_subframe_wrong_type_raises():
+    p = TemplateProtocolParser(create_nested_sample_template())
+    with pytest.raises(ValueError):
+        p.build_frame(cmd=1, seq=2, data_segment={"sub_cmd": 1, "sub_data": "AA"})  # repeat 需列表
+
+
+def test_variable_nested_needs_length_field_for_detect():
+    # 变长嵌套帧要靠外层 length_field 才能在流里定界；无长度字段时 detect 找不到帧尾
+    no_len = ProtocolTemplate(
+        name="nolen",
+        header="CC",
+        tail="DD",
+        min_length=3,
+        fields=[
+            {
+                "name": "seg",
+                "type": "subframe",
+                "offset": 1,
+                "repeat": True,
+                "fields": [{"name": "c", "type": "uint8", "offset": 0}],
+            }
+        ],
+    )
+    p = TemplateProtocolParser(no_len)
+    frame = p.build_frame(seg=[{"c": 1}, {"c": 2}, {"c": 3}])
+    assert p.detect_frame(frame) == (False, 0)
+
+    with_len = ProtocolTemplate(
+        name="withlen",
+        header="CC",
+        tail="DD",
+        min_length=3,
+        length_field={"name": "length", "offset": 1, "size": 1, "endianness": "big"},
+        fields=[
+            {
+                "name": "seg",
+                "type": "subframe",
+                "offset": 2,
+                "repeat": True,
+                "fields": [{"name": "c", "type": "uint8", "offset": 0}],
+            }
+        ],
+    )
+    p2 = TemplateProtocolParser(with_len)
+    f2 = p2.build_frame(seg=[{"c": 1}, {"c": 2}, {"c": 3}])
+    ok, consumed = p2.detect_frame(f2)
+    assert ok and consumed == len(f2)

@@ -165,6 +165,44 @@ expected = ModbusRTU.expected_response_length(0x03, 10)  # 25
 自动缩放、XY 李萨如模式、通道配色与显隐、两条光标的 ΔX/ΔY 读数、导出 CSV。
 非数值字段不会被画成假点，只累计跳过计数；通道定义与 X 轴模式随配置持久化。
 
+### 自定义协议模板（含嵌套子帧）
+
+「协议模板管理」用 JSON 定义帧格式，无需写 Python。基础字段按 `offset` + `size` 平铺解析，
+类型有 `uint8/uint16/uint32/bytes/string`；`length_field` 让外层帧变长，`crc` 支持
+`modbus/xmodem` 与 `before_crc/after_header/all` 覆盖范围。
+
+**数据段里再套子命令 / 子数据长度 / 子数据段（TLV / 子帧）** 用 `subframe` 字段表达：
+
+- `type: "subframe"` + `fields`：子字段偏移**相对子帧起点**，可任意深度递归；
+- `size_from: "<字段名>"`：本字段字节数由同层先前解析的整数字段驱动（如子数据长度 → 子数据段）；
+- `repeat: true`：把所在段按子帧块循环解析直到段尾，返回块列表（即重复 TLV）；
+- 省略 `size` 的 subframe 默认**填充到 CRC/帧尾之前**；`crc.offset: "auto"` 让 CRC 紧跟字段，变长帧可往返。
+
+```json
+{
+  "name": "Nested-TLV-Packet", "header": "EB 90", "tail": "0D 0A",
+  "length_field": {"name": "length", "offset": 2, "size": 2, "endianness": "big"},
+  "fields": [
+    {"name": "cmd", "type": "uint8", "offset": 4},
+    {"name": "seq", "type": "uint8", "offset": 5},
+    {"name": "data_segment", "type": "subframe", "offset": 6, "repeat": true,
+     "fields": [
+       {"name": "sub_cmd", "type": "uint8", "offset": 0},
+       {"name": "sub_len", "type": "uint8", "offset": 1},
+       {"name": "sub_data", "type": "bytes", "offset": 2, "size_from": "sub_len"}
+     ]}
+  ],
+  "crc": {"offset": "auto", "size": 2, "algorithm": "modbus", "coverage": "before_crc"}
+}
+```
+
+对话框「🧩 嵌套示例」按钮可直接载入上例。把 `sub_data` 的 `type` 改成 `subframe` 并给它自己的
+`fields`，就能继续往里递归。`build_frame` 会按子块实际长度自动回填 `sub_len` 与外层 `length`，
+解析/构建可往返。模板表达不了的协议，仍可写 `ProtocolParserBase` 插件注册进 `ProtocolRegistry`。
+
+> 变长嵌套帧请配外层 `length_field`：「自动检测」与流式接收靠它定界，没有长度字段时只能按
+> `min_length` 当定长帧处理。截断帧、子长度谎报、`size_from` 引用缺失/非整数字段都会判为无效帧而非崩溃。
+
 ## 开发计划
 
 - [x] 实时数据可视化（波形图）
