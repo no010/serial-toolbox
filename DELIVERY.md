@@ -12,7 +12,7 @@
 ### 主要功能
 - 串口管理（自动扫描、波特率/数据位/停止位/校验位配置）
 - HEX / ASCII 收发、时间戳、自动滚动、字节统计、发送历史
-- 协议解析：Modbus RTU + CAN / I²C / SPI / LIN / DMX512 / UART 包，以及**自定义 JSON 模板协议**
+- 协议解析：Modbus RTU + CAN / I²C / SPI / LIN / DMX512 / UART 包，以及**自定义 JSON 模板协议**（含嵌套子帧 / TLV 递归）
 - 数据曲线图：通道可绑定原始字节流 / 协议字段 / Modbus 寄存器，支持时间轴、XY 李萨如、冻结、光标测量、CSV 导出
 - Python 脚本引擎（`send` / `wait_response` / 断点：编辑器行号槽点击打/撤，暂停、单步、跨运行存活）
 - 多串口对比、数据导出、日志轮转、主题切换（亮/暗，持久化）、国际化（中/英，运行时切换并持久化）
@@ -28,7 +28,7 @@
 | 项目管理 | `pyproject.toml` + `uv.lock`（锁定依赖，可复现） |
 | 可执行文件 | `dist/serial-toolbox.exe`（Windows x64，PyInstaller onefile，约 52 MB） |
 | 打包配方 | `serial-toolbox.spec`（PyInstaller 构建脚本） |
-| 测试套件 | `tests/`（185 用例，pytest） |
+| 测试套件 | `tests/`（205 用例，pytest） |
 | CI 流水线 | `.github/workflows/ci.yml`（ruff + ty 类型检查 + pytest + Windows 打包冒烟） |
 | 文档 | `README.md`、本文件 |
 
@@ -75,7 +75,7 @@ uv run pyinstaller serial-toolbox.spec --noconfirm --clean
 
 | 项 | 状态 |
 |----|------|
-| 自动化测试 | `uv run pytest` → **185 passed**（协议解析器往返 / 导出 / 配置 / 日志 / 脚本引擎长度与残帧与缩进块与暂停单步与断点 / 图表通道模型与视图 / I2C 适配层与 EEPROM 分页读写 / UI 面板与行号槽与 I2C 面板与线程编组 / pyserial 传输端到端） |
+| 自动化测试 | `uv run pytest` → **205 passed**（协议解析器往返 / 嵌套子帧 TLV 递归与变长往返 / 导出 / 配置 / 日志 / 脚本引擎长度与残帧与缩进块与暂停单步与断点 / 图表通道模型与视图 / I2C 适配层与 EEPROM 分页读写 / UI 面板与行号槽与 I2C 面板与线程编组 / pyserial 传输端到端） |
 | 静态检查 | `uv run ruff check src/ tests/` → **All checks passed** |
 | 代码格式 | `uv run ruff format --check .` → **已统一**（ruff 默认风格；CI 与 pre-commit 均已锁定） |
 | 类型检查 | `uv run ty check src/ tests/` → **All checks passed**（51 处诊断已全部修复；门禁范围含 tests/）；交叉验证 `pyright src/ tests/` → **0 error** |
@@ -120,6 +120,10 @@ uv run ruff format .             # 就地格式化（CI 里跑的是 --check，�
     显示 256 字节 → 把 256 字节 hex 填入数据框「写入整片」→「校验」通过；未接从机时应报
     「无应答」而不是静默成功。在 `~/.serial-toolbox/eeprom/` 放一个 `24c64.json` 重启后，
     型号下拉应出现 24C64。
+13. **嵌套子帧模板**：「📋 管理模板」→「🧩 嵌套示例」→ 预览区递归展开 `data_segment [repeat]`
+    与子字段 `sub_cmd / sub_len / sub_data (size_from sub_len)` →「保存」→ 协议下拉出现
+    `Nested-TLV-Packet`；「自动检测」喂入一帧含多个 TLV 块的数据，解析面板应把数据段拆成
+    子命令/子长度/子数据列表，而非一坨 hex；改子数据长度后整帧长度与 CRC 仍校验通过。
 
 ---
 
@@ -129,7 +133,7 @@ uv run ruff format .             # 就地格式化（CI 里跑的是 --check，�
 
 - **代码签名**：exe 未签名，Windows SmartScreen 可能提示；正式发布建议代码签名。
 - **测试覆盖**：已覆盖核心解析器往返、导出、配置、日志、脚本引擎（含断点跨运行存活）、图表通道、
-  I2C 适配层与 EEPROM 分页读写（仿真总线）、i18n 与 UI 构造（185 用例），
+  I2C 适配层与 EEPROM 分页读写（仿真总线）、i18n 与 UI 构造（205 用例），
   含 pyserial socket 传输的真实收发端到端测试；CH347/CH341 只验到适配器的帧构造层（厂商 DLL 用替身），
   真机路径需人工确认。
 - **断点粒度**：脚本按顶层语句切分执行（缩进块必须整体交给 `exec`），块内断点是在整块开始

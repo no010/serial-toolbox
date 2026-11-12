@@ -40,6 +40,7 @@ from src.core.script_engine import EXAMPLE_SCRIPTS, ScriptEngine
 from src.protocols.template_parser import (
     ProtocolTemplate,
     ProtocolTemplateManager,
+    create_nested_sample_template,
     create_sample_template,
 )
 from src.ui.i18n import I18nManager
@@ -754,6 +755,7 @@ class ProtocolTemplateDialog(QDialog):
         self.loaded_label.setText(tr("label_loaded_templates"))
         self.new_btn.setText(tr("btn_new"))
         self.sample_btn.setText(tr("btn_sample"))
+        self.nested_btn.setText(tr("btn_sample_nested"))
         self.del_btn.setText(tr("btn_delete"))
         self.json_label.setText(tr("label_template_json"))
         self.preview_label.setText(tr("label_preview"))
@@ -787,6 +789,10 @@ class ProtocolTemplateDialog(QDialog):
         self.sample_btn = QPushButton()
         self.sample_btn.clicked.connect(self._load_sample_template)
         btn_layout.addWidget(self.sample_btn)
+
+        self.nested_btn = QPushButton()
+        self.nested_btn.clicked.connect(self._load_nested_sample_template)
+        btn_layout.addWidget(self.nested_btn)
 
         self.del_btn = QPushButton()
         self.del_btn.clicked.connect(self._delete_template)
@@ -860,6 +866,12 @@ class ProtocolTemplateDialog(QDialog):
         self.json_edit.setPlainText(json.dumps(template.to_dict(), ensure_ascii=False, indent=2))
         self._update_preview(template)
 
+    def _load_nested_sample_template(self):
+        """加载嵌套子帧（TLV）示例模板"""
+        template = create_nested_sample_template()
+        self.json_edit.setPlainText(json.dumps(template.to_dict(), ensure_ascii=False, indent=2))
+        self._update_preview(template)
+
     def _delete_template(self):
         """删除模板"""
         current = self.template_list.currentItem()
@@ -898,10 +910,20 @@ class ProtocolTemplateDialog(QDialog):
     def _update_preview(self, template: ProtocolTemplate):
         """更新预览信息"""
         tr = self.i18n.tr
-        fields = template.fields
-        field_lines = []
-        for f in fields:
-            field_lines.append(f"  - {f.get('name')}: {f.get('type')} @ offset {f.get('offset')}")
+        field_lines: list[str] = []
+
+        def walk(fields: list, indent: str):
+            for f in fields:
+                line = f"{indent}- {f.get('name')}: {f.get('type')} @ offset {f.get('offset')}"
+                if f.get("size_from"):
+                    line += f" (size_from {f['size_from']})"
+                if f.get("repeat"):
+                    line += " [repeat]"
+                field_lines.append(line)
+                if f.get("fields"):
+                    walk(f["fields"], indent + "  ")
+
+        walk(template.fields, "  ")
 
         preview = [
             f"{tr('pv_name')} {template.name}",
