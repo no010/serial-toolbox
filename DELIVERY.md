@@ -28,7 +28,7 @@
 | 项目管理 | `pyproject.toml` + `uv.lock`（锁定依赖，可复现） |
 | 可执行文件 | `dist/serial-toolbox.exe`（Windows x64，PyInstaller onefile，约 52 MB） |
 | 打包配方 | `serial-toolbox.spec`（PyInstaller 构建脚本） |
-| 测试套件 | `tests/`（205 用例，pytest） |
+| 测试套件 | `tests/`（214 用例，pytest） |
 | CI 流水线 | `.github/workflows/ci.yml`（ruff + ty 类型检查 + pytest + Windows 打包冒烟） |
 | 文档 | `README.md`、本文件 |
 
@@ -75,7 +75,7 @@ uv run pyinstaller serial-toolbox.spec --noconfirm --clean
 
 | 项 | 状态 |
 |----|------|
-| 自动化测试 | `uv run pytest` → **205 passed**（协议解析器往返 / 嵌套子帧 TLV 递归与变长往返 / 导出 / 配置 / 日志 / 脚本引擎长度与残帧与缩进块与暂停单步与断点 / 图表通道模型与视图 / I2C 适配层与 EEPROM 分页读写 / UI 面板与行号槽与 I2C 面板与线程编组 / pyserial 传输端到端） |
+| 自动化测试 | `uv run pytest` → **214 passed**（协议解析器往返 / 嵌套子帧 TLV 递归与变长往返与对抗性边界 / 导出 / 配置 / 日志 / 脚本引擎长度与残帧与缩进块与暂停单步与断点 / 图表通道模型与视图 / I2C 适配层与 EEPROM 分页读写 / UI 面板与行号槽与 I2C 面板与线程编组 / pyserial 传输端到端） |
 | 静态检查 | `uv run ruff check src/ tests/` → **All checks passed** |
 | 代码格式 | `uv run ruff format --check .` → **已统一**（ruff 默认风格；CI 与 pre-commit 均已锁定） |
 | 类型检查 | `uv run ty check src/ tests/` → **All checks passed**（51 处诊断已全部修复；门禁范围含 tests/）；交叉验证 `pyright src/ tests/` → **0 error** |
@@ -133,7 +133,7 @@ uv run ruff format .             # 就地格式化（CI 里跑的是 --check，�
 
 - **代码签名**：exe 未签名，Windows SmartScreen 可能提示；正式发布建议代码签名。
 - **测试覆盖**：已覆盖核心解析器往返、导出、配置、日志、脚本引擎（含断点跨运行存活）、图表通道、
-  I2C 适配层与 EEPROM 分页读写（仿真总线）、i18n 与 UI 构造（205 用例），
+  I2C 适配层与 EEPROM 分页读写（仿真总线）、i18n 与 UI 构造（214 用例），
   含 pyserial socket 传输的真实收发端到端测试；CH347/CH341 只验到适配器的帧构造层（厂商 DLL 用替身），
   真机路径需人工确认。
 - **断点粒度**：脚本按顶层语句切分执行（缩进块必须整体交给 `exec`），块内断点是在整块开始
@@ -149,6 +149,9 @@ uv run ruff format .             # 就地格式化（CI 里跑的是 --check，�
   追加新型号或按 `id` 覆盖内置（字段同 I2CTool：`id/name/size_bytes/address_width/
   page_size/write_cycle_ms/notes`），改完重启生效。
 - **I2C 操作不可中断**：整片写入期间按钮禁用但无法中途取消（32 KB 全片写约数秒）。
+- **嵌套模板**：变长嵌套帧需配外层 `length_field` 才能在「自动检测」/流式接收里定界；
+  子帧字段值是列表/字典，波形「协议字段」源只认顶层数值字段，嵌套子字段（如 `sub_cmd`）
+  暂不单独成曲线；无 `fields` 的 subframe 整段按原始 hex 显示。
 
 ---
 

@@ -200,6 +200,9 @@ expected = ModbusRTU.expected_response_length(0x03, 10)  # 25
 `fields`，就能继续往里递归。`build_frame` 会按子块实际长度自动回填 `sub_len` 与外层 `length`，
 解析/构建可往返。模板表达不了的协议，仍可写 `ProtocolParserBase` 插件注册进 `ProtocolRegistry`。
 
+> 变长嵌套帧请配外层 `length_field`：「自动检测」与流式接收靠它定界，没有长度字段时只能按
+> `min_length` 当定长帧处理。截断帧、子长度谎报、`size_from` 引用缺失/非整数字段都会判为无效帧而非崩溃。
+
 ## 开发计划
 
 - [x] 实时数据可视化（波形图）
