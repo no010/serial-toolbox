@@ -468,6 +468,57 @@ def test_nested_stream_chunked():
     assert len(out) == 1 and out[0].is_valid
 
 
+def test_registry_reload_after_save_and_delete(tmp_path):
+    """保存/删除模板后注册表需同步：下拉列表与自动检测都要看到新模板（不碰真实配置）。"""
+    from src.core.protocol_plugin import (
+        ProtocolParserBase,
+        ProtocolRegistry,
+        StreamProtocolParser,
+    )
+
+    class _Builtin(ProtocolParserBase):
+        name = "Stub-Builtin"
+
+        def parse(self, data):
+            return None
+
+        def detect_frame(self, data):
+            return (False, 0)
+
+    # 绕过 __init__（会读真实用户模板目录），手动装配空注册表 + tmp 模板管理器
+    reg = ProtocolRegistry.__new__(ProtocolRegistry)
+    reg.parsers = {}
+    reg._template_parser_names = set()
+    reg.template_manager = ProtocolTemplateManager(template_dir=str(tmp_path))
+    reg.register(_Builtin())
+
+    tpl = create_nested_sample_template()
+    frame = TemplateProtocolParser(tpl).build_frame(
+        cmd=1, seq=2, data_segment=[{"sub_cmd": 1, "sub_data": "AABBCC"}]
+    )
+
+    # 保存后、reload 前：注册表看不到新模板（这正是 bug）
+    reg.template_manager.save_template(tpl)
+    assert tpl.name not in reg.list_protocols()
+
+    reg.reload_templates()
+    assert tpl.name in reg.list_protocols()
+    assert "Stub-Builtin" in reg.list_protocols()  # 内置协议保留
+
+    # 自动检测（active_protocol=None）应识别并解析新模板帧
+    sp = StreamProtocolParser(reg)
+    out = sp.feed(frame)
+    assert len(out) == 1
+    assert out[0].is_valid, out[0].error_msg
+    assert out[0].protocol == tpl.name
+
+    # 删除后 reload：从列表移除，内置仍在
+    reg.template_manager.delete_template(tpl.name)
+    reg.reload_templates()
+    assert tpl.name not in reg.list_protocols()
+    assert "Stub-Builtin" in reg.list_protocols()
+
+
 def test_build_subframe_wrong_type_raises():
     p = TemplateProtocolParser(create_nested_sample_template())
     with pytest.raises(ValueError):

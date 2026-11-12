@@ -87,6 +87,7 @@ class ProtocolRegistry:
     def __init__(self):
         self.parsers: dict[str, ProtocolParserBase] = {}
         self.template_manager = None
+        self._template_parser_names: set[str] = set()
         self._register_built_in()
         self._register_templates()
 
@@ -114,8 +115,24 @@ class ProtocolRegistry:
             self.template_manager = ProtocolTemplateManager()
             for parser in self.template_manager.create_all_parsers():
                 self.register(parser)
+                self._template_parser_names.add(parser.name)
         except Exception:
             logger.exception("加载自定义协议模板失败")
+
+    def reload_templates(self):
+        """重新加载自定义模板协议（保存/删除模板后调用，保留内置协议）"""
+        manager = self.template_manager
+        if manager is None:
+            return
+        for name in self._template_parser_names:
+            self.parsers.pop(name, None)
+        self._template_parser_names.clear()
+        try:
+            for parser in manager.create_all_parsers():
+                self.register(parser)
+                self._template_parser_names.add(parser.name)
+        except Exception:
+            logger.exception("重新加载自定义协议模板失败")
 
     def register(self, parser: ProtocolParserBase):
         """注册协议解析器"""

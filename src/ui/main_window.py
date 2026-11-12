@@ -1342,7 +1342,8 @@ class SerialToolboxMainWindow(QMainWindow):
             self, self.protocol_registry.template_manager, i18n=self.i18n
         )
         dialog.exec()
-        # 刷新协议列表
+        # 重新加载模板解析器（保存/删除后注册表需同步），再刷新协议列表
+        self.protocol_registry.reload_templates()
         self.protocol_combo.clear()
         self.protocol_combo.addItems(
             [self.i18n.tr("auto_detect")] + self.protocol_registry.list_protocols()
